@@ -1,0 +1,14 @@
+numpy
+scipy
+petsc4py
+matplotlib
+qmcpy
+mpi4py
+gif
+seaborn
+pyvista
+pythreejs
+cmcrameri
+dill
+pathos
+h5py
