@@ -41,8 +41,10 @@ class StatROM_1D:
     """ 
     Methods to call FEM/ROM solvers and statFEM routines.
     """
-    def __init__(self,ne=100):
-        self.RBmodel = RBClass()
+    def __init__(self,up):
+        self.up = up
+        ne = up.n
+        self.RBmodel = RBClass(self.up)
         self.RBmodel.problem = "Helmholtz"
         self.reset(ne)
 
@@ -51,8 +53,8 @@ class StatROM_1D:
         """doc"""
         self.RBmodel.reset(ne=ne)
         self.RBmodel.lowrank = False    # use lowrank statfem
-        self.L=5   	                    # size of basis
-        self.par1 = 460                 # frequency
+        self.L = self.up.m  #5   	                    # size of basis
+        self.par1 = self.up.f  #460                 # frequency
         self.par2 = 1.15#1.1011236
 
 
@@ -61,11 +63,12 @@ class StatROM_1D:
         self.V_AORA_mean,self.V_adj_list = self.getAORAbasis(Nr=self.L,rhs_sp=np.pi**2/50,matCoef=np.array([0,0,0]))[0:2]
 
 
-    def getAORAbasis(self,Nr,freq_exp=100,matCoef=None,rhs_sp=None):
+    def getAORAbasis(self,Nr,freq_exp=100,matCoef=None,rhs_sp=None): #freq_exp = 100
         """ Calls the adaptive order rational Arnoldi ROM
             code to compute and store ROM projection matrices V.
             This is basically the majority of the offline part of the method.
         """
+        freq_exp = self.up.s
         s0 = 2*np.pi*freq_exp / 343
         if rhs_sp==None:
             rhs_sp=np.pi**2/50
@@ -147,11 +150,12 @@ class StatROM_1D:
         """ Computes a data generating solution and samples noisy data from it at sensor points.
             Also handles the error estimator training points positions.    
         """
-        n_sens = 11 
+        n_sens = self.up.ns #11 
         self.n_sens = n_sens
-     
-        idx = np.round(np.linspace(0, 1000, n_sens)).astype(int)
-        n_error_est = 12
+
+        size_fine = np.shape(self.RBmodel.coordinates)[0]-1
+        idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int)
+        n_error_est = self.up.n_est #12
         idx_error_est = np.round(np.linspace(1, self.RBmodel.ne, n_error_est)).astype(int)
 
         self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]
@@ -159,7 +163,7 @@ class StatROM_1D:
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_error_est]
 
         values_at_indices = [solution[x]+0.0 for x in idx]
-        n_obs = 200 
+        n_obs = self.up.no #200 
         self.n_obs = n_obs
         self.RBmodel.no = n_obs
         y_values_list = []
@@ -186,7 +190,7 @@ class StatROM_1D:
         C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
         C_z = np.dot( np.dot(A_inv,c_z), np.transpose(A_inv))
         for i in range(n_obs):
-            y_values_list.append([x+np.random.normal(0,1e-1) for j,x in enumerate(values_at_indices)])
+            y_values_list.append([x+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)]) #1e-1
         a = np.array(y_values_list)
         self.y_values_list = a.tolist()
         self.true_process = solution

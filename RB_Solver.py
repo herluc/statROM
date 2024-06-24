@@ -64,12 +64,12 @@ class KLE_expression:
 class RBClass:
     """solver class for a reduced basis statFEM approach"""
 
-    def __init__(self, nMC = 50,ne=100):
+    def __init__(self,up,ne=100):
         self.problem = None
         self.dom_a = 0.0 #domain boundaries
         self.dom_b = 1.0
-        self.nMC = nMC #number of Monte Carlo points
-        self.reset(ne)
+        self.up = up
+        self.reset(up.n)
 
 
     def reset(self,ne):
@@ -78,11 +78,9 @@ class RBClass:
         # approximation space polynomial degree
         deg = 1
         self.msh_coarse = create_interval(MPI.COMM_WORLD,self.ne,[0.0,1.0]) #define mesh
-        self.msh_ground_truth = create_interval(MPI.COMM_WORLD,1000,[0.0,1.0]) #define fine mesh for ground truth
+        self.msh_ground_truth = create_interval(MPI.COMM_WORLD,self.up.n_fine,[0.0,1.0]) #define fine mesh for ground truth
         self.msh = self.msh_coarse
-        
-        self.lf = 0.25
-        self.sigf = 0.1
+
         self.rho = 1.2
         self.f = 1500
         c = 343
@@ -91,13 +89,7 @@ class RBClass:
         self.k = self.omega / c # wave number
         self.g = self.rho * self.omega**2
 
-        self.f0 = 1e-6 # this is the excitation strength in the inhomog. Neumann BC, also smt. called U.
 
-
-        #mean for f:
-        self.mean = (np.pi)**2*(1/5)*np.ones(self.ne)
-        
-        #self.mean = (1.0)*np.ones(self.ne)
         self.V_coarse = FunctionSpace(self.msh_coarse, ("CG", deg)) # Function space
         self.coordinates_coarse = self.V_coarse.tabulate_dof_coordinates()[:,0:1]
 
@@ -690,7 +682,7 @@ class RBClass:
         
         posteriorGP = np.random.multivariate_normal(
             mean = np.real(u_mean_y), cov=np.real(C_u_y),
-            size=self.nMC)
+            size=1)
 
         return u_mean_y,C_u_y,u_mean_y_pred_rom,posteriorGP
 

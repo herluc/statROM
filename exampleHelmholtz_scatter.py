@@ -31,7 +31,7 @@ plt.rc('text.latex',  preamble=r'\usepackage{amsmath}\usepackage[utf8]{inputenc}
 
 
 
-class StatROM:
+class StatROM_2D:
     """ 
     Methods to call FEM/ROM solvers and statFEM routines.
     """
@@ -203,10 +203,12 @@ class StatROM:
             np.save(fileArray, solution)
             
         self.data_solution = solution
+        size_fine = np.shape(self.RBmodel.coordinates_ground_truth)[0]-1
+        size_coarse = np.shape(self.RBmodel.coordinates_coarse)[0]-4
 
-        idx = np.round(np.linspace(0, 1128, n_sens)).astype(int) #854
+        idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int) #854
         n_error_est = 200
-        idx_error_est = np.round(np.linspace(0, 854, n_error_est)).astype(int)
+        idx_error_est = np.round(np.linspace(0, size_coarse, n_error_est)).astype(int)
         idx_boundary = self.RBmodel.dofs_dirichl
         self.num_boundary = np.shape(idx_boundary)[0]
 
@@ -224,26 +226,26 @@ class StatROM:
         y_values_list = []
         y_values_list_real = []
         y_values_list_imag = []
-        sqdist = scipy.spatial.distance.cdist(self.RBmodel.coordinates, self.RBmodel.coordinates, 'sqeuclidean')
-        c_z=0.0225* np.exp(-2 * sqdist)
-        c_z=0.03* np.exp(-2 * sqdist)
-        C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
+        #sqdist = scipy.spatial.distance.cdist(self.RBmodel.coordinates, self.RBmodel.coordinates, 'sqeuclidean')
+        #c_z=0.0225* np.exp(-2 * sqdist)
+        #c_z=0.03* np.exp(-2 * sqdist)
+        #C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
         self.RBmodel.get_C_f()
-        for i in range(self.RBmodel.ne+1):
-            for j in range(self.RBmodel.ne+1):
-                C_z[i,j] = self.RBmodel.integratedTestF[i] * c_z[i,j] * self.RBmodel.integratedTestF[j]
-        A = self.RBmodel.A
-        A = A.todense()
+        # for i in range(self.RBmodel.ne+1):
+        #     for j in range(self.RBmodel.ne+1):
+        #         C_z[i,j] = self.RBmodel.integratedTestF[i] * c_z[i,j] * self.RBmodel.integratedTestF[j]
+        # A = self.RBmodel.A
+        # A = A.todense()
 
-        ident = np.identity(np.shape(A)[0])
-        A_inv = np.linalg.solve(A,ident)
+        # ident = np.identity(np.shape(A)[0])
+        # A_inv = np.linalg.solve(A,ident)
 
-        M = self.RBmodel.Msp
+        # M = self.RBmodel.Msp
 
-        M = M.todense()
-        c_z = M@c_z@M.conj().T
-        C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
-        C_z = np.dot( np.dot(A_inv,c_z), A_inv.conj().T)
+        # M = M.todense()
+        # c_z = M@c_z@M.conj().T
+        # C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
+        # C_z = np.dot( np.dot(A_inv,c_z), A_inv.conj().T)
  
         for i in range(n_obs):
             y_values_list.append([np.abs(x)+np.random.normal(0,5e-4) for j,x in enumerate(values_at_indices)])
@@ -715,7 +717,7 @@ class StatROM:
 
 
 if __name__ == '__main__':
-    funcs = StatROM()
+    funcs = StatROM_2D()
     
     funcs.switchMesh("ground_truth")
     funcs.RBmodel.doFEMHelmholtz(freq=funcs.par1,rhsPar=np.zeros(np.shape(funcs.RBmodel.coordinates_ground_truth)[0]),assemble_only=True)

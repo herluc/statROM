@@ -347,13 +347,13 @@ class RBClass:
 
     def solveFEMData(self,sample):
         self.s.vector.array[:] = np.real(sample) * (np.cos(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1) + 1j*np.imag(sample) * (np.sin(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1)
-        with XDMFFile(MPI.COMM_WORLD, "data_f.xdmf", "w") as xdmf:
+        with XDMFFile(MPI.COMM_WORLD, "./Results/data_f.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.msh)
             ut = Function(self.V)
             ut.x.array[:] = np.real(sample) * (np.cos(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1) + 1j*np.imag(sample) * (np.sin(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1)
             xdmf.write_function(ut)
 
-        with XDMFFile(MPI.COMM_WORLD, "sample_f.xdmf", "w") as xdmf:
+        with XDMFFile(MPI.COMM_WORLD, "./Results/sample_f.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.msh)
             ut = Function(self.V)
             ut.x.array[:] = sample
