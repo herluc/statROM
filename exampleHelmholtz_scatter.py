@@ -35,25 +35,26 @@ class StatROM_2D:
     """ 
     Methods to call FEM/ROM solvers and statFEM routines.
     """
-    def __init__(self,ne=30):
-        self.RBmodel = RBClass()
+    def __init__(self,up):
+        self.up = up
+        self.RBmodel = RBClass(self.up)
         self.RBmodel.problem = "Helmholtz"
-        self.reset(ne)
+        self.reset()
 
 
-    def reset(self,ne):
+    def reset(self):
         """Enables simple re-initialisation during convergence studies"""
-        self.RBmodel.reset(ne=ne)
+        self.RBmodel.reset()
         self.RBmodel.lowrank = False # use lowrank statfem
-        self.L=12#12#16		         # size of basis
-        self.par1 = 360#360#366          # frequency
+        self.L=self.up.m#12#16		         # size of basis
+        self.par1 = self.up.f#360#366          # frequency
         self.par2 = 1.15#1.1011236  
 
 
 
     def snapshotsHandling(self,rhs_sp=None):
         self.V_AORA,_ = self.getAORAbasis(Nr=self.L,rhs_sp=rhs_sp)[0:2]
-        self.V_AORA_mean = self.getAORAbasis(Nr=self.L,rhs_sp=np.zeros(np.shape(funcs.RBmodel.coordinates)[0]))[0]
+        self.V_AORA_mean = self.getAORAbasis(Nr=self.L,rhs_sp=np.zeros(np.shape(self.RBmodel.coordinates)[0]))[0]
 
 
     def getAORAbasis(self,Nr,freq_exp=250,matCoef=None,rhs_sp=None,adj=False):
@@ -61,6 +62,7 @@ class StatROM_2D:
             code to compute and store ROM projection matrices V.
             This is basically the majority of the offline part of the method.
         """
+        freq_exp = self.up.s
         s0 = 2*np.pi*freq_exp / 340 # expansion frequency expressed as wave number
         self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=rhs_sp)
         V_AORA,_,LinSysFac,_,_= AORA(self.RBmodel.Msp,self.RBmodel.Dsp,self.RBmodel.KKsp,self.RBmodel.FFnp,self.RBmodel.C,[s0],Nr)
@@ -68,7 +70,7 @@ class StatROM_2D:
 
         # compute the projection matrices for the error estimator. Previous LU decomp. is reused in LinSysFac
         if adj == True:
-            self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=np.zeros(np.shape(funcs.RBmodel.coordinates)[0]))
+            self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
             P_error_est = self.RBmodel.getP(self.y_points_error_est)
             V_adj_list = [AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])]
         self.nAora = Nr
@@ -187,7 +189,7 @@ class StatROM_2D:
         """ Computes a data generating solution and samples noisy data from it at sensor points.
             Also handles the error estimator training points positions.    
         """
-        n_sens = 5
+        n_sens = self.up.ns#5
         solution =solution*0.999
         solution = self.RBmodel.solveFEMData(sample=self.f_samples[0]+1j*self.f_samples_im[0])[2]
   #      with open('./Results/data_vector.npy', 'rb') as fileArray:
@@ -207,7 +209,7 @@ class StatROM_2D:
         size_coarse = np.shape(self.RBmodel.coordinates_coarse)[0]-4
 
         idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int) #854
-        n_error_est = 200
+        n_error_est = self.up.n_est#200
         idx_error_est = np.round(np.linspace(0, size_coarse, n_error_est)).astype(int)
         idx_boundary = self.RBmodel.dofs_dirichl
         self.num_boundary = np.shape(idx_boundary)[0]
@@ -217,53 +219,34 @@ class StatROM_2D:
         idx_total = np.unique(np.concatenate([idx_error_est,idx_boundary]))
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_total]
       
-        funcs.y_points = self.y_points
+        #funcs.y_points = self.y_points
 
         values_at_indices = [solution[x]+0.0 for x in idx]
 
-        n_obs = 20
-        funcs.RBmodel.no = n_obs
+        n_obs = self.up.no#20
+        self.RBmodel.no = n_obs
         y_values_list = []
         y_values_list_real = []
         y_values_list_imag = []
-        #sqdist = scipy.spatial.distance.cdist(self.RBmodel.coordinates, self.RBmodel.coordinates, 'sqeuclidean')
-        #c_z=0.0225* np.exp(-2 * sqdist)
-        #c_z=0.03* np.exp(-2 * sqdist)
-        #C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
-        self.RBmodel.get_C_f()
-        # for i in range(self.RBmodel.ne+1):
-        #     for j in range(self.RBmodel.ne+1):
-        #         C_z[i,j] = self.RBmodel.integratedTestF[i] * c_z[i,j] * self.RBmodel.integratedTestF[j]
-        # A = self.RBmodel.A
-        # A = A.todense()
 
-        # ident = np.identity(np.shape(A)[0])
-        # A_inv = np.linalg.solve(A,ident)
-
-        # M = self.RBmodel.Msp
-
-        # M = M.todense()
-        # c_z = M@c_z@M.conj().T
-        # C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
-        # C_z = np.dot( np.dot(A_inv,c_z), A_inv.conj().T)
  
         for i in range(n_obs):
-            y_values_list.append([np.abs(x)+np.random.normal(0,5e-4) for j,x in enumerate(values_at_indices)])
-            y_values_list_real.append([np.real(x)+np.random.normal(0,5e-4) for j,x in enumerate(values_at_indices)])
-            y_values_list_imag.append([np.imag(x)+np.random.normal(0,5e-4) for j,x in enumerate(values_at_indices)])
+            y_values_list.append([np.abs(x)+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)]) #5e-4
+            y_values_list_real.append([np.real(x)+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)])
+            y_values_list_imag.append([np.imag(x)+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)])
         y_values_list_unified = np.block([np.array(y_values_list_real),np.array(y_values_list_imag)])
         a = np.array(y_values_list)
         self.y_values_list = a.tolist()
-        funcs.y_values_list = self.y_values_list
+        #funcs.y_values_list = self.y_values_list
 
         self.y_values_list_real = np.array(y_values_list_real).tolist()
-        funcs.y_values_list_real = self.y_values_list_real
+        #funcs.y_values_list_real = self.y_values_list_real
 
         self.y_values_list_imag = np.array(y_values_list_imag).tolist()
-        funcs.y_values_list_imag = self.y_values_list_imag
+        #funcs.y_values_list_imag = self.y_values_list_imag
 
         self.y_values_list_unified = y_values_list_unified.tolist()
-        funcs.y_values_list_unified = self.y_values_list_unified
+        #funcs.y_values_list_unified = self.y_values_list_unified
 
         self.true_process = solution
 
@@ -295,7 +278,7 @@ class StatROM_2D:
         dr=[]
         dr_var = []
         Cf = kernels.matern52(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)
-        Cf = self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-6
+        Cf = self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
         Cf = Cf+ 1j*Cf
         for i in range(np.shape(P)[0]):
             V = self.V_adj_list[i]
@@ -310,8 +293,8 @@ class StatROM_2D:
             Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V_mean.conj().T@Cf@V_mean)@np.array(zAVA).conj().T
             Cdr_real = np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T)
             Cdr_imag = np.imag(z_est).T@Cf@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@Cf@np.imag(V_mean@np.array(zAVA).conj().T)
-            Cdr_real = np.real(Cdr)
-            Cdr_imag = np.imag(Cdr)
+          #  Cdr_real = np.real(Cdr)
+          #  Cdr_imag = np.imag(Cdr)
           
             dr_var.append(Cdr_real + 1j*Cdr_imag)
 
@@ -433,13 +416,13 @@ class StatROM_2D:
             A = A.todense()
             f = f_rhs
             self.sol_mean=np.linalg.solve(A,f)
-            _, _, self.sol_mean  = funcs.RBmodel.solveFEM(rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
+            _, _, self.sol_mean  = self.RBmodel.solveFEM(rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
             u = []
             u_unified = []
             u_data = []
             for j,samp in enumerate(self.f_samples):
-                self.RBmodel.doFEMHelmholtz(freq=funcs.par1,rhsPar=samp+1j*self.f_samples_im[j])
-                _, _, uj  = funcs.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
+                self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp+1j*self.f_samples_im[j])
+                _, _, uj  = self.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
                 uD = uj - self.RBmodel.ui.x.array
                 u_data.append(uD)
                 u.append(uj)
@@ -561,6 +544,21 @@ class StatROM_2D:
             funcs.RBmodel.facet_markers = funcs.RBmodel.facet_markers_coarse
             funcs.RBmodel.cell_markers = funcs.RBmodel.cell_markers_coarse
 
+
+    def switchMesh_self(self,grade):
+        if grade == "ground_truth":
+            self.RBmodel.msh = self.RBmodel.msh_ground_truth
+            self.RBmodel.V = self.RBmodel.V_ground_truth
+            self.RBmodel.coordinates = self.RBmodel.coordinates_ground_truth
+            self.RBmodel.facet_markers = self.RBmodel.facet_markers_ground_truth
+            self.RBmodel.cell_markers = self.RBmodel.cell_markers_ground_truth
+
+        if grade == "coarse":
+            self.RBmodel.msh = self.RBmodel.msh_coarse
+            self.RBmodel.V = self.RBmodel.V_coarse
+            self.RBmodel.coordinates = self.RBmodel.coordinates_coarse
+            self.RBmodel.facet_markers = self.RBmodel.facet_markers_coarse
+            self.RBmodel.cell_markers = self.RBmodel.cell_markers_coarse
   
 
     def plotPriorVtk(self):

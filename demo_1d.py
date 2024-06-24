@@ -42,11 +42,12 @@ if __name__ == '__main__':
     ####
 
     funcs.switchMesh_self("coarse")
+    funcs.generateParameterSamples(up.n_qmc) 
     ### Compute ROM basis:
     for i,sample in enumerate(funcs.f_samples):
         print("computing basis for sample no. "+str(i))
         funcs.computeROMbasisSample(sample,i)
-    ######
+    ####
 
     # Full order reference:
     funcs.getFullOrderPrior(multiple_bases = True) 

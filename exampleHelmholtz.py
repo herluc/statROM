@@ -551,7 +551,7 @@ class StatROM_1D:
         print("classical statFEM on ROM prior posterior error:")
         norm,_ = self.computeErrorNorm(self.u_mean_y_easy,self.true_process)
         print(norm)
-        print("classical statFEM on FEM prior posterior error:")
+        print("classical statFEM on FEM prior posterior error (reference):")
         norm,_ = self.computeErrorNorm(self.u_mean_y_std,self.true_process)
         print(norm)
 
