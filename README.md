@@ -19,16 +19,21 @@ in your terminal before trying our examples to enable complex numbers in FEniCSx
 
 Two Demo files are provided:
 
-- exampleHelmholtz.py
-- exampleHelmholtz_scatter.py
+- demo_1d.py
+- demo_2d.py
 
 The first runs the 1D example section of the paper, the second runs the 2D acoustic scattering example.
 Simply run
 ```bash
-python3 exampleHelmholtz.py
+python3 demo_1d.py
 
 ```
-to compute results.
+to compute results. 
+Within the respective file, inside the class 
+```python
+class UserParameters
+```
+the most interesting parameters can be changed to observe the effect on the posterior error.
 
 The script will, at the end, output something along
 ```bash
