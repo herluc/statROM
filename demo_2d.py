@@ -50,8 +50,7 @@ if __name__ == '__main__':
     ### Compute ROM basis:
     _, funcs.V_adj_list = funcs.getAORAbasis(Nr=funcs.L,rhs_sp=np.zeros(np.shape(funcs.RBmodel.coordinates_coarse)[0]),adj=True)[0:2] # adjoint solves
     for i,sample in enumerate(funcs.f_samples):
-        print("sample number:")
-        print(i)
+        print("primal sample number: "+str(i))
         funcs.computeROMbasisSample(sample,i)
     ####
 

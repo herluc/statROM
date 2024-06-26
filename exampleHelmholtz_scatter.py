@@ -72,7 +72,11 @@ class StatROM_2D:
         if adj == True:
             self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
             P_error_est = self.RBmodel.getP(self.y_points_error_est)
-            V_adj_list = [AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])]
+            V_adj_list = []
+            for i in range(np.shape(P_error_est)[0]):
+                V_adj_list.append(AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0])
+                print("adjoint sample nr. "+str(i))
+            #V_adj_list = [AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])]
         self.nAora = Nr
 
         return V_AORA,V_adj_list,Nr
@@ -211,7 +215,7 @@ class StatROM_2D:
         idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int) #854
         n_error_est = self.up.n_est#200
         idx_error_est = np.round(np.linspace(0, size_coarse, n_error_est)).astype(int)
-        idx_boundary = self.RBmodel.dofs_dirichl
+        idx_boundary = self.RBmodel.dofs_dirichl_coarse
         self.num_boundary = np.shape(idx_boundary)[0]
 
         self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]#*2
@@ -280,6 +284,10 @@ class StatROM_2D:
         Cf = kernels.matern52(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)
         Cf = self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
         Cf = Cf+ 1j*Cf
+
+        #Cf = np.cov(self.f_samples.T+1j*self.f_samples_im.T)
+
+
         for i in range(np.shape(P)[0]):
             V = self.V_adj_list[i]
             A_r_T = V.conj().T@A.conj().T@V
@@ -292,11 +300,12 @@ class StatROM_2D:
 
             Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V_mean.conj().T@Cf@V_mean)@np.array(zAVA).conj().T
             Cdr_real = np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T)
-            Cdr_imag = np.imag(z_est).T@Cf@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@Cf@np.imag(V_mean@np.array(zAVA).conj().T)
-          #  Cdr_real = np.real(Cdr)
-          #  Cdr_imag = np.imag(Cdr)
+            Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T)
+            #Cdr_real = np.real(Cdr)
+            #Cdr_imag = np.imag(Cdr)
           
             dr_var.append(Cdr_real + 1j*Cdr_imag)
+            #dr_var.append(Cdr)
 
         if multiple_bases == False:
             self.dr_var = np.nan_to_num(np.array(dr_var))
@@ -729,8 +738,7 @@ if __name__ == '__main__':
     funcs.getFullOrderPrior(multiple_bases = True)
     _, funcs.V_adj_list = funcs.getAORAbasis(Nr=funcs.L,rhs_sp=np.zeros(np.shape(funcs.RBmodel.coordinates_coarse)[0]),adj=True)[0:2] # adjoint solves
     for i,sample in enumerate(funcs.f_samples):
-        print("sample number:")
-        print(i)
+        print("primal sample number: "+str(i))
         funcs.computeROMbasisSample(sample,i)
 
 

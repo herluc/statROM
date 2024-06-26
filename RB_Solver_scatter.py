@@ -56,7 +56,7 @@ class RBClass:
                  Lx=L,
                  Ly=H,
                  lc=lc,
-                 refine = 0.035)
+                 refine = 0.035) #0.035
         self.msh = self.msh_coarse
         self.cell_markers = self.cell_markers_coarse
         self.facet_markers = self.facet_markers_coarse
@@ -176,6 +176,8 @@ class RBClass:
 
         L = -ufl.inner(ui+1j*self.si+self.s, v) *dx
 
+        dofs_dirichl_coarse = locate_dofs_topological(self.V_coarse, self.msh_coarse.topology.dim-1, self.facet_markers_coarse.find(50))
+        self.dofs_dirichl_coarse = dofs_dirichl_coarse
         dofs_dirichl = locate_dofs_topological(self.V, self.msh.topology.dim-1, self.facet_markers.find(50))
         self.dofs_dirichl = dofs_dirichl
         uD = Function(self.V)
