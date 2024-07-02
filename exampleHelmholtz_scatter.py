@@ -168,10 +168,11 @@ class StatROM_2D:
             self.u_mean_imag = np.mean(np.array(u_rom_imag),axis=0)
             self.u_mean = np.mean(np.array(u_rom),axis=0)
             C_u = np.cov(np.array(u_rom_unified), rowvar=0, ddof=0)
+            C_u_approx = np.cov(np.array(u_rom), rowvar=0, ddof=0)
             C_u_real = np.cov(np.array(u_rom_real), rowvar=0, ddof=0)
             C_u_imag = np.cov(np.array(u_rom_imag), rowvar=0, ddof=0)
           
-            self.romErrorEst([self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0])],ur=self.u_mean,multiple_bases=False)
+            self.romErrorEst([self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0])],ur=self.u_mean,Cu=C_u_approx,Cu_real=C_u_real,Cu_imag=C_u_imag,multiple_bases=False)
             
           
         ident = np.identity(np.shape(C_u)[0])
@@ -256,7 +257,7 @@ class StatROM_2D:
 
 
 
-    def romErrorEst(self,par,ur = None,multiple_bases = False):
+    def romErrorEst(self,par,ur = None,Cu=None,Cu_real=None,Cu_imag=None,multiple_bases = False):
         """ Provides a cheap estimate for the ROM error
             using evaluations of the adoint solution at
             given points throughout the domain and a
@@ -295,22 +296,45 @@ class StatROM_2D:
             z_est = V@zr
             dr_i = z_est.conj().T@np.array(residual)[0]
             dr.append(dr_i)
-
+            #VAr_inv = V @ np.linalg.solve(A_r,ident)  ##neu
             zAVA = z_est.conj().T@A@VAr_inv
 
-            Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V_mean.conj().T@Cf@V_mean)@np.array(zAVA).conj().T
-            Cdr_real = np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T)
-            Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T)
+       #     Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V_mean.conj().T@Cf@V_mean)@np.array(zAVA).conj().T
+       #     Cdr_real = np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T)
+       #     Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T)
+            Cf_approx = A@Cu@A.conj().T
+            Cdr = z_est.conj().T@Cf@z_est + z_est.conj().T@Cf_approx@z_est
+            Cdr_real = np.real(z_est).conj().T@Cf@np.real(z_est) + np.real(z_est).conj().T@Cu_real@np.real(z_est)
+            Cdr_imag = np.imag(z_est).conj().T@Cf@np.imag(z_est) + np.imag(z_est).conj().T@Cu_imag@np.imag(z_est)
+            print("Cdr")
+            print(Cdr)
+            print("Cdr_real")
+            print(Cdr_real)
+            print(np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T))
+            
+            print("Cdr_imag")
+            print(Cdr_imag)
+            print(np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T))
+
+            #Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V.conj().T@Cf@V)@np.array(zAVA).conj().T
+          #  Cdr_real = np.real(z_est).T@np.real(Cf)@np.real(z_est) + np.real(np.array(zAVA)@V.conj().T)@np.real(Cf)@np.real(V@np.array(zAVA).conj().T)
+          #  Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V.conj().T)@np.imag(Cf)@np.imag(V@np.array(zAVA).conj().T)
+           
             #Cdr_real = np.real(Cdr)
             #Cdr_imag = np.imag(Cdr)
           
-            dr_var.append(Cdr_real + 1j*Cdr_imag)
-            #dr_var.append(Cdr)
+           # dr_var.append(Cdr_real + 1j*Cdr_imag)
+            dr_var.append(Cdr)
 
         if multiple_bases == False:
             self.dr_var = np.nan_to_num(np.array(dr_var))
+            print(self.dr_var)
+          #  self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
+          #  self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
+
             self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
             self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
+        
         else:
             return dr
 
@@ -326,12 +350,14 @@ class StatROM_2D:
         y_points = np.array(y_points)
 
         # simple way to find suitable hyperparameters
-        l = 340/self.par1/2
-        sig = np.max(np.abs(dr))*4 #3
+        l = 340/self.par1/3
+        sig = np.max(np.abs(dr))*3#4 #3
         noise = np.diag(dr_vari[:,0])
+      #  noise = np.diag(dr_vari)
         # training noise comes pre-computed from the adjoint estimator
         prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-10*ident_coord #l=0.012
         data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+noise#+1e-9*ident_y
+        #data_kernel = noise
         data_kernel = 0.5*(data_kernel+data_kernel.T)
         mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
 

@@ -5,7 +5,7 @@ This is Python code to reproduce the results in our reduced order model statFEM 
 
 
 ## Usage
-To be able to run the code, FEniCSx (https://fenicsproject.org) is required as a FEM backend. We recommend using the dolfinx Docker image. A suitable Dockerfile and VSCode .devcontainer configuration is given.
+To be able to run the code, FEniCSx (https://fenicsproject.org) is required as a FEM backend. We recommend using the dolfinx Docker image. A suitable Dockerfile and VSCode .devcontainer configuration is given. Make sure that Docker is installed and running on your machine and, if you want to use VSCode, that the devcontainers extension is installed.
 
 Run
 ```bash
