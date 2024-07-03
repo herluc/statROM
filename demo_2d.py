@@ -36,7 +36,7 @@ if __name__ == '__main__':
     ### Generate data from fine mesh:
     funcs.switchMesh_self("ground_truth")
     funcs.generateParameterSamples(up.n_qmc,save=False,load=True)
-    funcs.getFullOrderPrior(multiple_bases = True) # solve for "ground truth"
+    funcs.getFullOrderPrior() # solve for "ground truth"
     funcs.get_noisy_data_from_solution(0,np.abs(funcs.u_mean_std)) # extract noisy data at sensors
     ####
 
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     funcs.generateParameterSamples(up.n_qmc,load = False) # get new parameter sample
 
     # Full order reference:
-    funcs.getFullOrderPrior(multiple_bases = True)
+    funcs.getFullOrderPrior()
 
     ### Compute ROM basis:
     _, funcs.V_adj_list = funcs.getAORAbasis(Nr=funcs.L,rhs_sp=np.zeros(np.shape(funcs.RBmodel.coordinates_coarse)[0]),adj=True)[0:2] # adjoint solves
@@ -55,7 +55,7 @@ if __name__ == '__main__':
     ####
 
     # ROM prior and error estiamte:
-    funcs.calcROMprior(multiple_bases = True)
+    funcs.calcROMprior()
 
     funcs.plotPriorVtk()
 

@@ -62,5 +62,5 @@ if __name__ == '__main__':
 
     # plotting etc.
     funcs.saveData()
-    funcs.plotPriorPosteriorComparison(prior=True,posterior=False) # choose if you want to see the prior, the posterior or both
+    funcs.plotPriorPosteriorComparison(prior=True,posterior=True) # choose if you want to see the prior, the posterior or both
     funcs.plotRomError()

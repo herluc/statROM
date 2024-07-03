@@ -116,7 +116,9 @@ class StatROM_1D:
 
 
     def calcROMprior(self):
-        """ Computes the prior mean and covariance for the ROM""" 
+        """ Computes the prior mean and covariance for the ROM
+            as well as the ROM error estimate.
+        """ 
         u_rom = []
         d_rom = []
         for i,sample in enumerate(self.f_samples):

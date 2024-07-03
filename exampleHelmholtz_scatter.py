@@ -38,21 +38,18 @@ class StatROM_2D:
     def __init__(self,up):
         self.up = up
         self.RBmodel = RBClass(self.up)
-        self.RBmodel.problem = "Helmholtz"
         self.reset()
 
 
     def reset(self):
         """Enables simple re-initialisation during convergence studies"""
         self.RBmodel.reset()
-        self.RBmodel.lowrank = False # use lowrank statfem
-        self.L=self.up.m#12#16		         # size of basis
-        self.par1 = self.up.f#360#366          # frequency
-        self.par2 = 1.15#1.1011236  
+        self.L=self.up.m		        # size of basis
+        self.par1 = self.up.f           # frequency
 
 
 
-    def snapshotsHandling(self,rhs_sp=None):
+    def wrapper_AORA(self,rhs_sp=None):
         self.V_AORA,_ = self.getAORAbasis(Nr=self.L,rhs_sp=rhs_sp)[0:2]
         self.V_AORA_mean = self.getAORAbasis(Nr=self.L,rhs_sp=np.zeros(np.shape(self.RBmodel.coordinates)[0]))[0]
 
@@ -129,7 +126,7 @@ class StatROM_2D:
 
 
     def computeROMbasisSample(self,sample,i):
-        self.snapshotsHandling(rhs_sp=sample+1j*self.f_samples_im[i])
+        self.wrapper_AORA(rhs_sp=sample+1j*self.f_samples_im[i])
         self.saveBasis(self.V_AORA,i)
 
 
@@ -142,39 +139,34 @@ class StatROM_2D:
                self.V_AORA_mean = np.load(fileArray)
 
 
-    def calcROMprior(self,multiple_bases = False):
-        """ Computes the prior mean and covariance for the ROM""" 
-        if multiple_bases == False:
-            (self.u_mean, self.C_u) = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,1])
-            C_u = self.RBmodel.get_C_u_ROM_MC(self.par1,self.V_AORA)
-            self.u_mean = np.real(self.u_mean)
-            C_u = np.real(C_u)
-        else:
-            u_rom = []
-            u_rom_unified = []
-            u_rom_real = []
-            u_rom_imag = []
-            self.loadBasis(0)
-            self.rom_mean = self.RBmodel.getPriorAORA(self.V_AORA_mean,[self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0]),self.het_samples[0]])[0]
-            for i,sample in enumerate(self.f_samples):
-                self.loadBasis(i)
-                u_sc,_ = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]])
-                u_rom.append(u_sc)
-                u_rom_real.append(np.real(u_sc))
-                u_rom_imag.append(np.imag(u_sc))
-                u_rom_unified.append(np.concatenate([np.real(u_sc),np.imag(u_sc)]))
+    def calcROMprior(self):
+        """ Computes the prior mean and covariance for the ROM            
+            as well as the ROM error estimate.
+        """ 
+        u_rom = []
+        u_rom_unified = []
+        u_rom_real = []
+        u_rom_imag = []
+        self.loadBasis(0)
+        self.rom_mean = self.RBmodel.getPriorAORA(self.V_AORA_mean,[self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0]),self.het_samples[0]])[0]
+        for i,sample in enumerate(self.f_samples):
+            self.loadBasis(i)
+            u_sc,_ = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]])
+            u_rom.append(u_sc)
+            u_rom_real.append(np.real(u_sc))
+            u_rom_imag.append(np.imag(u_sc))
+            u_rom_unified.append(np.concatenate([np.real(u_sc),np.imag(u_sc)]))
 
-            self.u_mean_real = np.mean(np.array(u_rom_real),axis=0)
-            self.u_mean_imag = np.mean(np.array(u_rom_imag),axis=0)
-            self.u_mean = np.mean(np.array(u_rom),axis=0)
-            C_u = np.cov(np.array(u_rom_unified), rowvar=0, ddof=0)
-            C_u_approx = np.cov(np.array(u_rom), rowvar=0, ddof=0)
-            C_u_real = np.cov(np.array(u_rom_real), rowvar=0, ddof=0)
-            C_u_imag = np.cov(np.array(u_rom_imag), rowvar=0, ddof=0)
-          
-            self.romErrorEst([self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0])],ur=self.u_mean,Cu=C_u_approx,Cu_real=C_u_real,Cu_imag=C_u_imag,multiple_bases=False)
-            
-          
+        self.u_mean_real = np.mean(np.array(u_rom_real),axis=0)
+        self.u_mean_imag = np.mean(np.array(u_rom_imag),axis=0)
+        self.u_mean = np.mean(np.array(u_rom),axis=0)
+        C_u = np.cov(np.array(u_rom_unified), rowvar=0, ddof=0)
+        C_u_approx = np.cov(np.array(u_rom), rowvar=0, ddof=0)
+        C_u_real = np.cov(np.array(u_rom_real), rowvar=0, ddof=0)
+        C_u_imag = np.cov(np.array(u_rom_imag), rowvar=0, ddof=0)
+        
+        self.romErrorEst([self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0])],ur=self.u_mean,Cu=C_u_approx,Cu_real=C_u_real,Cu_imag=C_u_imag,multiple_bases=False)
+        
         ident = np.identity(np.shape(C_u)[0])
         self.C_u = C_u + 9e-8*ident
         ident_small = np.identity(np.shape(C_u_real)[0])
@@ -194,8 +186,7 @@ class StatROM_2D:
         """ Computes a data generating solution and samples noisy data from it at sensor points.
             Also handles the error estimator training points positions.    
         """
-        n_sens = self.up.ns#5
-        solution =solution*0.999
+        n_sens = self.up.ns
         solution = self.RBmodel.solveFEMData(sample=self.f_samples[0]+1j*self.f_samples_im[0])[2]
   #      with open('./Results/data_vector.npy', 'rb') as fileArray:
   #          solution = np.load(fileArray)
@@ -213,28 +204,25 @@ class StatROM_2D:
         size_fine = np.shape(self.RBmodel.coordinates_ground_truth)[0]-1
         size_coarse = np.shape(self.RBmodel.coordinates_coarse)[0]-4
 
-        idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int) #854
-        n_error_est = self.up.n_est#200
+        idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int)
+        n_error_est = self.up.n_est
         idx_error_est = np.round(np.linspace(0, size_coarse, n_error_est)).astype(int)
         idx_boundary = self.RBmodel.dofs_dirichl_coarse
         self.num_boundary = np.shape(idx_boundary)[0]
 
-        self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]#*2
+        self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]
        
         idx_total = np.unique(np.concatenate([idx_error_est,idx_boundary]))
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_total]
-      
-        #funcs.y_points = self.y_points
-
+   
         values_at_indices = [solution[x]+0.0 for x in idx]
 
-        n_obs = self.up.no#20
+        n_obs = self.up.no
         self.RBmodel.no = n_obs
         y_values_list = []
         y_values_list_real = []
         y_values_list_imag = []
 
- 
         for i in range(n_obs):
             y_values_list.append([np.abs(x)+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)]) #5e-4
             y_values_list_real.append([np.real(x)+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)])
@@ -242,16 +230,9 @@ class StatROM_2D:
         y_values_list_unified = np.block([np.array(y_values_list_real),np.array(y_values_list_imag)])
         a = np.array(y_values_list)
         self.y_values_list = a.tolist()
-        #funcs.y_values_list = self.y_values_list
-
         self.y_values_list_real = np.array(y_values_list_real).tolist()
-        #funcs.y_values_list_real = self.y_values_list_real
-
         self.y_values_list_imag = np.array(y_values_list_imag).tolist()
-        #funcs.y_values_list_imag = self.y_values_list_imag
-
         self.y_values_list_unified = y_values_list_unified.tolist()
-        #funcs.y_values_list_unified = self.y_values_list_unified
 
         self.true_process = solution
 
@@ -286,9 +267,6 @@ class StatROM_2D:
         Cf = self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
         Cf = Cf+ 1j*Cf
 
-        #Cf = np.cov(self.f_samples.T+1j*self.f_samples_im.T)
-
-
         for i in range(np.shape(P)[0]):
             V = self.V_adj_list[i]
             A_r_T = V.conj().T@A.conj().T@V
@@ -296,42 +274,13 @@ class StatROM_2D:
             z_est = V@zr
             dr_i = z_est.conj().T@np.array(residual)[0]
             dr.append(dr_i)
-            #VAr_inv = V @ np.linalg.solve(A_r,ident)  ##neu
-            zAVA = z_est.conj().T@A@VAr_inv
-
-       #     Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V_mean.conj().T@Cf@V_mean)@np.array(zAVA).conj().T
-       #     Cdr_real = np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T)
-       #     Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T)
             Cf_approx = A@Cu@A.conj().T
             Cdr = z_est.conj().T@Cf@z_est + z_est.conj().T@Cf_approx@z_est
-            Cdr_real = np.real(z_est).conj().T@Cf@np.real(z_est) + np.real(z_est).conj().T@Cu_real@np.real(z_est)
-            Cdr_imag = np.imag(z_est).conj().T@Cf@np.imag(z_est) + np.imag(z_est).conj().T@Cu_imag@np.imag(z_est)
-            print("Cdr")
-            print(Cdr)
-            print("Cdr_real")
-            print(Cdr_real)
-            print(np.real(z_est).T@Cf@np.real(z_est) + np.real(np.array(zAVA)@V_mean.conj().T)@Cf@np.real(V_mean@np.array(zAVA).conj().T))
-            
-            print("Cdr_imag")
-            print(Cdr_imag)
-            print(np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V_mean.conj().T)@np.imag(Cf)@np.imag(V_mean@np.array(zAVA).conj().T))
 
-            #Cdr = z_est.conj().T@Cf@z_est + np.array(zAVA)@(V.conj().T@Cf@V)@np.array(zAVA).conj().T
-          #  Cdr_real = np.real(z_est).T@np.real(Cf)@np.real(z_est) + np.real(np.array(zAVA)@V.conj().T)@np.real(Cf)@np.real(V@np.array(zAVA).conj().T)
-          #  Cdr_imag = np.imag(z_est).T@np.imag(Cf)@np.imag(z_est) + np.imag(np.array(zAVA)@V.conj().T)@np.imag(Cf)@np.imag(V@np.array(zAVA).conj().T)
-           
-            #Cdr_real = np.real(Cdr)
-            #Cdr_imag = np.imag(Cdr)
-          
-           # dr_var.append(Cdr_real + 1j*Cdr_imag)
             dr_var.append(Cdr)
 
         if multiple_bases == False:
             self.dr_var = np.nan_to_num(np.array(dr_var))
-            print(self.dr_var)
-          #  self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
-          #  self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
-
             self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
             self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
         
@@ -351,13 +300,11 @@ class StatROM_2D:
 
         # simple way to find suitable hyperparameters
         l = 340/self.par1/3
-        sig = np.max(np.abs(dr))*3#4 #3
+        sig = np.max(np.abs(dr))*3
         noise = np.diag(dr_vari[:,0])
-      #  noise = np.diag(dr_vari)
         # training noise comes pre-computed from the adjoint estimator
         prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-10*ident_coord #l=0.012
         data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+noise#+1e-9*ident_y
-        #data_kernel = noise
         data_kernel = 0.5*(data_kernel+data_kernel.T)
         mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
 
@@ -367,33 +314,6 @@ class StatROM_2D:
 
         return post_mean,post_cov
     
-
-    def errorGPnoisy(self,dr,y_points):
-        dr = np.nan_to_num(dr)
-        dr_mean = np.mean(dr,axis=0)
-        dr_mean = np.nan_to_num(dr_mean)
-        #dr_mean=[0.0 if np.abs(dri) < 1e-12 else dri for dri in dr_mean]
-
-        dr_cov = np.cov(dr, rowvar=0, ddof=0)
-        dr_cov = np.nan_to_num(dr_cov)
-        ident_coord = np.identity(len(self.RBmodel.coordinates_coarse))
-        y_points = np.array(y_points)
-
-        l = 340/self.par1/6
-        sig = np.max(np.abs(dr_mean))*0.05
-
-        prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-15*ident_coord
-
-        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+dr_cov
-        mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
-
-        solved = scipy.linalg.solve(data_kernel, mixed_kernel).conj().T
-        post_mean = solved @ dr_mean
-        post_cov = prior_cov - (solved@mixed_kernel)
-
-        return post_mean,post_cov
-
-
 
 
     def getFullOrderPosterior(self):
@@ -427,6 +347,7 @@ class StatROM_2D:
         self.u_mean_y_easy, self.C_u_y_easy = u_mean_y_easy_real+1j*u_mean_y_easy_imag, C_u_y_easy_real+1j*C_u_y_easy_imag
         return self.u_mean_y_easy, self.C_u_y_easy
 
+
     def getCorrectedROMPosterior(self):
         """ compute the statFEM posterior in the new way, as proposed in our paper.
             The ROM prior is used with correction terms.
@@ -442,45 +363,38 @@ class StatROM_2D:
         return 
 
 
-    def getFullOrderPrior(self,multiple_bases = False):
-        # prior calculation Full Order Model
-        if multiple_bases == False:
-            u_mean_std = np.abs(self.RBmodel.get_U_mean_standard([0,0]) - self.RBmodel.ui.x.array)#+2
-            self.u_mean_test = u_mean_std
-            self.u_mean_data = self.RBmodel.get_U_mean_standard([0,0]) - self.RBmodel.ui.x.array
-            C_u_std = self.RBmodel.get_C_u_MC()
-            self.C_u_stdDiag = np.sqrt(np.diagonal(C_u_std))
-        else:
-            _, A, _ = self.RBmodel.doFEMHelmholtz(self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0]),assemble_only=True)
-            f_rhs = self.RBmodel.FFnp.copy()
-            A = A.todense()
-            f = f_rhs
-            self.sol_mean=np.linalg.solve(A,f)
-            _, _, self.sol_mean  = self.RBmodel.solveFEM(rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
-            u = []
-            u_unified = []
-            u_data = []
-            for j,samp in enumerate(self.f_samples):
-                self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp+1j*self.f_samples_im[j])
-                _, _, uj  = self.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
-                uD = uj - self.RBmodel.ui.x.array
-                u_data.append(uD)
-                u.append(uj)
-                u_unified.append(np.concatenate([np.real(uj),np.imag(uj)]))
-            u_mean_std = np.mean(np.array(u),axis=0)  
-            self.u_mean_data = np.mean(np.array(u_data),axis=0)
-            C_u_std = np.cov(u, rowvar=0, ddof=0)
-            self.C_u_std_real = np.cov(np.real(u), rowvar=0, ddof=0)
-            self.C_u_std_imag = np.cov(np.imag(u), rowvar=0, ddof=0)
-            ident_long = np.identity(np.shape(C_u_std)[0])
-            ident = np.identity(np.shape(self.C_u_std_real)[0])
-            C_u_std = C_u_std + 9e-8*ident_long
-            self.C_u_std_real = self.C_u_std_real + 9e-8*ident
-            self.C_u_std_imag = self.C_u_std_imag + 9e-8*ident
-            self.C_u_stdDiag = np.sqrt(np.diagonal(C_u_std))
-            self.C_u_stdDiag_real = np.sqrt(np.diagonal(self.C_u_std_real))
-            self.C_u_stdDiag_imag = np.sqrt(np.diagonal(self.C_u_std_imag))
-            self.C_u_stdDiag = self.C_u_stdDiag_real + 1j*self.C_u_stdDiag_imag
+    def getFullOrderPrior(self):
+        # prior calculation for the Full Order Model
+        _, A, _ = self.RBmodel.doFEMHelmholtz(self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0]),assemble_only=True)
+        f_rhs = self.RBmodel.FFnp.copy()
+        A = A.todense()
+        f = f_rhs
+        self.sol_mean=np.linalg.solve(A,f)
+        _, _, self.sol_mean  = self.RBmodel.solveFEM(rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
+        u = []
+        u_unified = []
+        u_data = []
+        for j,samp in enumerate(self.f_samples):
+            self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp+1j*self.f_samples_im[j])
+            _, _, uj  = self.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
+            uD = uj - self.RBmodel.ui.x.array
+            u_data.append(uD)
+            u.append(uj)
+            u_unified.append(np.concatenate([np.real(uj),np.imag(uj)]))
+        u_mean_std = np.mean(np.array(u),axis=0)  
+        self.u_mean_data = np.mean(np.array(u_data),axis=0)
+        C_u_std = np.cov(u, rowvar=0, ddof=0)
+        self.C_u_std_real = np.cov(np.real(u), rowvar=0, ddof=0)
+        self.C_u_std_imag = np.cov(np.imag(u), rowvar=0, ddof=0)
+        ident_long = np.identity(np.shape(C_u_std)[0])
+        ident = np.identity(np.shape(self.C_u_std_real)[0])
+        C_u_std = C_u_std + 9e-8*ident_long
+        self.C_u_std_real = self.C_u_std_real + 9e-8*ident
+        self.C_u_std_imag = self.C_u_std_imag + 9e-8*ident
+        self.C_u_stdDiag = np.sqrt(np.diagonal(C_u_std))
+        self.C_u_stdDiag_real = np.sqrt(np.diagonal(self.C_u_std_real))
+        self.C_u_stdDiag_imag = np.sqrt(np.diagonal(self.C_u_std_imag))
+        self.C_u_stdDiag = self.C_u_stdDiag_real + 1j*self.C_u_stdDiag_imag
 
         self.u_mean_std,self.C_u_std = u_mean_std,C_u_std
 
@@ -565,22 +479,6 @@ class StatROM_2D:
 
         return error_sobolev_real/u_sobolev_real, error_sobolev_imag/u_sobolev_imag
  
-
-
-    def switchMesh(self,grade):
-        if grade == "ground_truth":
-            funcs.RBmodel.msh = funcs.RBmodel.msh_ground_truth
-            funcs.RBmodel.V = funcs.RBmodel.V_ground_truth
-            funcs.RBmodel.coordinates = funcs.RBmodel.coordinates_ground_truth
-            funcs.RBmodel.facet_markers = funcs.RBmodel.facet_markers_ground_truth
-            funcs.RBmodel.cell_markers = funcs.RBmodel.cell_markers_ground_truth
-
-        if grade == "coarse":
-            funcs.RBmodel.msh = funcs.RBmodel.msh_coarse
-            funcs.RBmodel.V = funcs.RBmodel.V_coarse
-            funcs.RBmodel.coordinates = funcs.RBmodel.coordinates_coarse
-            funcs.RBmodel.facet_markers = funcs.RBmodel.facet_markers_coarse
-            funcs.RBmodel.cell_markers = funcs.RBmodel.cell_markers_coarse
 
 
     def switchMesh_self(self,grade):
@@ -751,35 +649,5 @@ class StatROM_2D:
 
 
 
-
-if __name__ == '__main__':
-    funcs = StatROM_2D()
-    
-    funcs.switchMesh("ground_truth")
-    funcs.RBmodel.doFEMHelmholtz(freq=funcs.par1,rhsPar=np.zeros(np.shape(funcs.RBmodel.coordinates_ground_truth)[0]),assemble_only=True)
-    funcs.generateParameterSamples(256,save=False,load=True)
-    funcs.getFullOrderPrior(multiple_bases = True)
-    print("full order")
-    funcs.get_noisy_data_from_solution(0,np.abs(funcs.u_mean_std))
-    funcs.switchMesh("coarse")
-
-    funcs.generateParameterSamples(256,load = False)
-    funcs.getFullOrderPrior(multiple_bases = True)
-    _, funcs.V_adj_list = funcs.getAORAbasis(Nr=funcs.L,rhs_sp=np.zeros(np.shape(funcs.RBmodel.coordinates_coarse)[0]),adj=True)[0:2] # adjoint solves
-    for i,sample in enumerate(funcs.f_samples):
-        print("primal sample number: "+str(i))
-        funcs.computeROMbasisSample(sample,i)
-
-
-    funcs.calcROMprior(multiple_bases = True)
-    funcs.plotPriorVtk()
-
-    funcs.getFullOrderPosterior()
-    funcs.getEasyROMPosterior()
-    funcs.getCorrectedROMPosterior()
-
-    funcs.plotPosteriorVtk()
-   
-    
 
 #end of file

@@ -30,20 +30,18 @@ class RBClass:
     """solver class for a reduced basis statFEM approach"""
 
     def __init__(self,up):
-        self.problem = None
-        self.dom_a = 0.0 #domain boundaries
-        self.dom_b = 1.0
         self.up = up
         self.reset()
 
 
     def reset(self):
-        """doc"""
+        """ Generates meshes using gmsh and computed the corresponding function spaces
+            with FEniCSx.
+        """
         # approximation space polynomial degree
         deg = 1
         L = 1
         H = 1
-
         lc =.9
 
         self.msh_coarse, self.cell_markers_coarse, self.facet_markers_coarse  = generate_mesh_with_obstacle(
@@ -56,76 +54,16 @@ class RBClass:
                  Lx=L,
                  Ly=H,
                  lc=lc,
-                 refine = 0.035) #0.035
+                 refine = 0.035)
         self.msh = self.msh_coarse
         self.cell_markers = self.cell_markers_coarse
         self.facet_markers = self.facet_markers_coarse
 
-
-
-        self.f0 = 1e-6 # this is the excitation strength in the inhomog. Neumann BC, also smt. called U.
-
-
-     
         self.V_coarse = FunctionSpace(self.msh_coarse, ("CG", deg)) # Function space
         self.coordinates_coarse = self.V_coarse.tabulate_dof_coordinates()[:,0:2]
 
         self.V_ground_truth = FunctionSpace(self.msh_ground_truth, ("CG", deg)) # Function space
         self.coordinates_ground_truth = self.V_ground_truth.tabulate_dof_coordinates()[:,0:2]
-       # self.el = self.V.element()
-
-        self.parsSampled = False
-        self.lowrank = False
-
-        
-
-
-    def get_U_mean_standard(self,mean_par):
-        """ calculates the mean for the FEM solution prior GP"""
-        uh_mean, U_mean, uh_np_mean = self.solveFEM(mean_par)
-
-        return uh_np_mean
-
-
-    def get_C_u_FEM(self):
-        C_f = self.get_C_f()
-        A = self.A
-        ident = np.identity(np.shape(C_f)[0])
-        C_u = np.dot( spsolve(A,C_f), spsolve(A,ident))
-        self.C_u_std = C_u  + 1e-6*ident
-        self.C_u_stdDiag = np.sqrt(np.diagonal(C_u+ 1e-6*ident))
-
-        return C_u
-
-
-    def get_C_u_MC(self):
-        f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
-        f_samples = np.random.normal(loc=1.0, scale=0.09,size=50)
-        solVec = []
-        for sample in f_samples:
-            uh, U, uh_np = self.solveFEM([sample,sample])
-            solVec.append(uh_np)
-        C_u = np.cov(solVec, rowvar=0, ddof=0)
-        
-        C_u_MC = C_u
-        ident = np.identity(np.shape(C_u)[0])
-        
-        return C_u_MC+ 9e-4*ident
-    
-    
-    def get_C_u_ROM_MC(self,freq, V):
-        f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
-        f_samples = np.random.normal(loc=1.0, scale=0.09,size=50)
-        solVec = []
-        for sample in f_samples:
-            u,_ = self.getPriorAORA(V,[freq,sample])
-            solVec.append(u)
-        C_u = np.cov(solVec, rowvar=0, ddof=0)
-        
-        C_u_MC = C_u
-        ident = np.identity(np.shape(C_u)[0])
-        
-        return C_u_MC+ 9e-4*ident
 
 
 
@@ -136,18 +74,8 @@ class RBClass:
 
     def doFEMHelmholtz(self,freq,rhsPar=0,het_par=0,assemble_only=False):
         """basic FEM solver for the Helmholtz equation 
-        Gives the mean solution for the prior and expects the frequency and material constant.
+        Returns the mean solution for the prior and expects the frequency parameters.
         """
-
-        # Source amplitude
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*rhsPar
-        else:
-            Amp = 1
-            Amp = Amp*rhsPar
-
         c = 340
         k = 2 * np.pi * freq / c
         self.k = k
@@ -158,7 +86,6 @@ class RBClass:
         self.s.vector.array[:] = np.real(rhsPar)
         self.si = Function(self.V)
         self.si.vector.array[:] = np.imag(rhsPar)
-
 
         # Define variational problem
         u = ufl.TrialFunction(self.V)
@@ -207,9 +134,7 @@ class RBClass:
         KK = assemble_matrix(form(kk), bcs=[bc])
         KK.assemble()
         kki, kkj, kkv = KK.getValuesCSR()
-
         self.KKsp = csr_matrix((kkv, kkj, kki))
-
 
         ff = -inner(ui+1j*self.si+self.s, v) * dx
         FF = assemble_vector(form(ff))
@@ -230,104 +155,25 @@ class RBClass:
         # Compute solution
         uh = Function(self.V)
         uh.name = "u"
-        #problem = LinearProblem(a, L, u=uh, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
-        self.problem = LinearProblem(a, L,bcs=[bc],u=uh)# bcs=[bc], u=uh)
+
+        self.problem = LinearProblem(a, L,bcs=[bc],u=uh)
 
         if assemble_only == False:
             self.problem.solve()
             uh_np = uh.vector.getArray()
             uh_np = np.copy(uh_np)
             U = uh.vector
-
             p_full = spsolve(Asp,self.FFnp)
             uh_np = p_full
             return U, self.A, uh_np
         elif assemble_only == True:
-            #print("no solve, only assembling")
             U,uh_np = None,None
             return U, self.A, uh_np
 
         
 
-
-    def doFEM(self,freq=10,rhsPar=1):
-        """basic FEM solver for the Helmholtz equation 
-        Gives the mean solution for the prior and expects the frequency and material constant.
-        """
-        # Source amplitude
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*rhsPar
-        else:
-            Amp = 1
-            Amp = Amp*rhsPar
-
-        c = 340
-        k = 2 * np.pi * freq / c
-        self.k = k
-
-        # approximation space polynomial degree
-        deg = 1
-        # Test and trial function space
-        V = FunctionSpace(self.msh, ("CG", deg))
-
-        # Define variational problem
-        u = ufl.TrialFunction(V)
-        v = ufl.TestFunction(V)
-        self.v = v
-        f = Function(V)
-        f.interpolate(lambda x: Amp * k**2 * np.cos(k * x[0]) )#* np.cos(k * x[1]))
-        #f = Constant(msh, PETSc.ScalarType(A * k**2))
-        f = Constant(self.msh, PETSc.ScalarType(Amp))
-        self.f = f
-
-
-        boundaries = [(1, lambda x: np.isclose(x[0], 0)),
-                    (2, lambda x: np.isclose(x[0], 1.0))]
-
-        facet_indices, facet_markers = [], []
-        fdim = self.msh.topology.dim - 1
-        for (marker, locator) in boundaries:
-            facets = locate_entities(self.msh, fdim, locator)
-            facet_indices.append(facets)
-            facet_markers.append(np.full_like(facets, marker))
-        facet_indices = np.hstack(facet_indices).astype(np.int32)
-        facet_markers = np.hstack(facet_markers).astype(np.int32)
-        sorted_facets = np.argsort(facet_indices)
-        facet_tag = meshtags(self.msh, fdim, facet_indices[sorted_facets], facet_markers[sorted_facets])
-
-
-        ds = Measure("ds", domain=self.msh, subdomain_data=facet_tag)
-        self.ds = ds
-
-
-        bcs = []
-        mass_form = -k**2 *ufl.inner(1,v)*ufl.dx
-        mass_form = inner(grad(u), grad(v)) * dx
-        a = inner(grad(u), grad(v)) * dx - k**2 * inner(u, v) * dx# - (0.1j*k*beta) * inner(u,v) * ds(2)
-        L = inner(f * k**2, v) * ds(1)
-        A = assemble_matrix(form(a))
-        A.assemble()
-        self.rhs = L
-
-        M = assemble_matrix(form(mass_form))
-
-        self.A = A
-        M.assemble()
-        self.M = M
-
-        # Compute solution
-        uh = Function(V)
-        uh.name = "u"
-        self.problem = LinearProblem(a, L, u=uh, bcs=bcs, petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
- 
- 
-
     def solveFEM(self, rhsPar):
-       
         uh = self.problem.solve()
-
         uh_np = uh.vector.getArray()
         uh_np = np.copy(uh_np)
         U = uh.vector
@@ -379,29 +225,22 @@ class RBClass:
         dim = np.shape(self.coordinates)[0]
         C_f = np.zeros((dim,dim))
 
+        # Acc. to Girolami et al 2021, lumped mass approximation of C_f
         for i in range(dim):
             for j in range(dim):
                 C_f[i,j] = self.integratedTestF[i] * c_f[i,j] * self.integratedTestF[j]
-     
-    
         return C_f
     
 
 
 
     def getPriorAORA(self,V,par):
-
+        """ With a given projection matrix V and parameter sample, compute the ROM result
+        """
         _ = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1]
         c = 340
         k = 2 * np.pi * par[0] / c
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*par[1]
-        else:
-            Amp = 1
-            Amp = Amp*par[1]
-        
+
         Mr = V.conj().T@self.Msp@V
         Dr = V.conj().T@self.Dsp@V
         Kr = V.conj().T@self.KKsp@V
@@ -422,8 +261,8 @@ class RBClass:
         expects a set of parameters, the sensor locations and the prior covariance matrix.
         """
         rho = params[0]
-        sigd = params[1]#0.01
-        ld = params[2]#0.2
+        sigd = params[1]
+        ld = params[2]
         y_valuesList=y_values
         y_points = np.transpose(np.atleast_2d(np.array(y_points)))
         logpost = 0
@@ -651,16 +490,15 @@ class RBClass:
 
         no = np.shape(y_values)[0]
 
-        if self.lowrank==False:
-            c, low = cho_factor((1/(no*rho*rho))*(C_d+rho**2*CROM+C_e)+P@C_u@P_T)
-            C_u_y = C_u - C_u@P_T@cho_solve((c, low), P@C_u)
+        c, low = cho_factor((1/(no*rho*rho))*(C_d+rho**2*CROM+C_e)+P@C_u@P_T)
+        C_u_y = C_u - C_u@P_T@cho_solve((c, low), P@C_u)
 
-            B = multi_dot([P,C_u,P_T])+1/(rho*rho*self.no)*(C_d+rho**2*CROM+C_e)
-            u_mean_y = np.array(u_mean) + (1/(rho*self.no))*multi_dot([C_u,P_T,np.linalg.solve(B,sum_y-rho*self.no*np.dot(P,u_mean)-self.no*rho*dROM)])
-            u_mean_y = rho*u_mean_y#
-            u_mean_y_pred_rom= u_mean_y + rho*dROMfull #eq. 57 statFEM paper
-            C_u_y = rho**2 * C_u_y + self.C_d_total + CROMfull + self.get_C_e(np.shape(self.C_d_total)[0]) #eq. 57 statFEM paper
-            
+        B = multi_dot([P,C_u,P_T])+1/(rho*rho*self.no)*(C_d+rho**2*CROM+C_e)
+        u_mean_y = np.array(u_mean) + (1/(rho*self.no))*multi_dot([C_u,P_T,np.linalg.solve(B,sum_y-rho*self.no*np.dot(P,u_mean)-self.no*rho*dROM)])
+        u_mean_y = rho*u_mean_y#
+        u_mean_y_pred_rom= u_mean_y + rho*dROMfull #eq. 57 statFEM paper
+        C_u_y = rho**2 * C_u_y + self.C_d_total + CROMfull + self.get_C_e(np.shape(self.C_d_total)[0]) #eq. 57 statFEM paper
+        
 
         posteriorGP = np.random.multivariate_normal(
             mean = np.real(u_mean_y), cov=np.real(C_u_y),

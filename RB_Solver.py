@@ -89,7 +89,7 @@ class RBClass:
 
     def doFEMHelmholtz(self,freq,rhsPar=1,mat_par=np.array([0]),assemble_only=False):
         """basic FEM solver for the Helmholtz equation 
-        Gives the mean solution for the prior and expects the frequency and material constant.
+        Returns the mean solution for the prior and expects the frequency and parameters.
         """
         Amp = rhsPar
         c = 343
@@ -222,6 +222,7 @@ class RBClass:
         self.c_f = c_f
         C_f = np.zeros((self.ne+1,self.ne+1))
 
+        # Acc. to Girolami et al 2021, lumped mass approximation of C_f
         for i in range(self.ne+1):
             for j in range(self.ne+1):
                 C_f[i,j] = self.integratedTestF[i] * c_f[i,j] * self.integratedTestF[j]
