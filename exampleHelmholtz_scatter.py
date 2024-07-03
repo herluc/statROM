@@ -413,6 +413,9 @@ class StatROM_2D:
 
 
     def getEasyROMPosterior(self):
+        """ compute the statFEM posterior in the classical way.
+            The ROM prior is used but no correction terms.
+        """
         print("Classical ROM posterior START")
         (u_mean_y_easy_real, C_u_y_easy_real, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_real,np.real(self.u_mean),self.C_u_real)
         (u_mean_y_easy_imag, C_u_y_easy_imag, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_imag,np.imag(self.u_mean),self.C_u_imag)
@@ -424,14 +427,16 @@ class StatROM_2D:
         self.u_mean_y_easy, self.C_u_y_easy = u_mean_y_easy_real+1j*u_mean_y_easy_imag, C_u_y_easy_real+1j*C_u_y_easy_imag
         return self.u_mean_y_easy, self.C_u_y_easy
 
-    def getAdvancedROMPosterior(self):
-        # compute Posterior with ROM prior and ROM error within the data model
-        print("Advanced ROM posterior START")
+    def getCorrectedROMPosterior(self):
+        """ compute the statFEM posterior in the new way, as proposed in our paper.
+            The ROM prior is used with correction terms.
+        """
+        print("Corrected ROM posterior START")
         (u_mean_y_real, C_u_y_real, u_mean_y_pred_rom_real, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list_real,np.real(self.u_mean),self.C_u_real,self.dr_mean_real,self.dr_cov_real)
         (u_mean_y_imag, C_u_y_imag, u_mean_y_pred_rom_imag, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list_imag,np.imag(self.u_mean),self.C_u_imag,self.dr_mean_imag,self.dr_cov_imag)
         self.C_u_y_Diag_real = np.sqrt(np.diagonal(C_u_y_real))
         self.C_u_y_Diag_imag = np.sqrt(np.diagonal(C_u_y_imag))
-        print("Advanced ROM posterior FINISH")
+        print("Corrected ROM posterior FINISH")
         self.u_mean_y_pred_rom = u_mean_y_pred_rom_real + 1j*u_mean_y_pred_rom_imag
         self.C_u_y_Diag = self.C_u_y_Diag_real + 1j*self.C_u_y_Diag_imag
         return 
@@ -546,7 +551,6 @@ class StatROM_2D:
         u_global = mesh.comm.allreduce(u_local, op=MPI.SUM)
         u_global_H10 = mesh.comm.allreduce(u_local_H10, op=MPI.SUM)
 
-        u_sobolev = np.sqrt(u_global) + k**(-2)*np.sqrt(u_global_H10)
         u_sobolev_real = np.copy(u_global + k**(-2)*u_global_H10)
 
         u = form(inner(u_ex_W_imag, u_ex_W_imag) * ufl.dx)
@@ -556,7 +560,6 @@ class StatROM_2D:
         u_global = mesh.comm.allreduce(u_local, op=MPI.SUM)
         u_global_H10 = mesh.comm.allreduce(u_local_H10, op=MPI.SUM)
 
-        u_sobolev = np.sqrt(u_global) + k**(-2)*np.sqrt(u_global_H10)
         u_sobolev_imag = np.copy(u_global + k**(-2)*u_global_H10)
 
 
@@ -773,7 +776,7 @@ if __name__ == '__main__':
 
     funcs.getFullOrderPosterior()
     funcs.getEasyROMPosterior()
-    funcs.getAdvancedROMPosterior()
+    funcs.getCorrectedROMPosterior()
 
     funcs.plotPosteriorVtk()
    

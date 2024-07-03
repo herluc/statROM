@@ -62,6 +62,6 @@ if __name__ == '__main__':
     # FOM reference posterior, classical ROM posterior and proposed ROM posterior:
     funcs.getFullOrderPosterior()
     funcs.getEasyROMPosterior()
-    funcs.getAdvancedROMPosterior()
+    funcs.getCorrectedROMPosterior()
 
     funcs.plotPosteriorVtk()

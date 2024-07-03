@@ -37,7 +37,7 @@ if __name__ == '__main__':
     ### Generate data from fine mesh:
     funcs.switchMesh_self("ground_truth")
     funcs.generateParameterSamples(up.n_qmc) 
-    funcs.getFullOrderPrior(multiple_bases = True) # solve for "ground truth"
+    funcs.getFullOrderPrior() # solve for "ground truth"
     funcs.get_noisy_data_from_solution(0,np.real(funcs.u_mean_std)) # extract noisy data at sensors
     ####
 
@@ -50,17 +50,17 @@ if __name__ == '__main__':
     ####
 
     # Full order reference:
-    funcs.getFullOrderPrior(multiple_bases = True) 
+    funcs.getFullOrderPrior() 
 
     # ROM prior and error estiamte:
-    funcs.calcROMprior(multiple_bases = True)
+    funcs.calcROMprior()
     
     # FOM reference posterior, classical ROM posterior and proposed ROM posterior:
     funcs.getFullOrderPosterior()
     funcs.getEasyROMPosterior()
-    funcs.getAdvancedROMPosterior()
+    funcs.getCorrectedROMPosterior()
 
     # plotting etc.
     funcs.saveData()
-    funcs.plotPriorPosteriorComparison()
+    funcs.plotPriorPosteriorComparison(prior=True,posterior=False) # choose if you want to see the prior, the posterior or both
     funcs.plotRomError()

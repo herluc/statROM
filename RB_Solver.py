@@ -37,7 +37,7 @@ class KLE_expression:
         yGrid = xGrid
         [X_grid,Y_grid] = np.meshgrid(xGrid,yGrid)
 
-        sigma = 1.0 
+        sigma = np.sqrt(5e-2)
         correlationLength = 0.3
         truncOrder = int(np.sqrt(len(self.inputVector)))
 
@@ -66,8 +66,6 @@ class RBClass:
 
     def __init__(self,up,ne=100):
         self.problem = None
-        self.dom_a = 0.0 #domain boundaries
-        self.dom_b = 1.0
         self.up = up
         self.reset(up.n)
 
@@ -81,67 +79,11 @@ class RBClass:
         self.msh_ground_truth = create_interval(MPI.COMM_WORLD,self.up.n_fine,[0.0,1.0]) #define fine mesh for ground truth
         self.msh = self.msh_coarse
 
-        self.rho = 1.2
-        self.f = 1500
-        c = 343
-        self.Z = self.rho * c
-        self.omega = 2* np.pi * self.f
-        self.k = self.omega / c # wave number
-        self.g = self.rho * self.omega**2
-
-
         self.V_coarse = FunctionSpace(self.msh_coarse, ("CG", deg)) # Function space
         self.coordinates_coarse = self.V_coarse.tabulate_dof_coordinates()[:,0:1]
 
         self.V_ground_truth = FunctionSpace(self.msh_ground_truth, ("CG", deg)) # Function space
         self.coordinates_ground_truth = self.V_ground_truth.tabulate_dof_coordinates()[:,0:1]
-       # self.el = self.V.element()
-
-        self.parsSampled = False
-        self.lowrank = False
-
-        
-
- 
-
-    def get_U_mean_standard(self,mean_par):
-        """ calculates the mean for the FEM solution prior GP"""
-        uh_mean, U_mean, uh_np_mean = self.solveFEM(mean_par,np.array([0,0,0]))
-
-        return uh_np_mean
-
-
-
-
-    def get_C_u_MC(self,par_samples):
-        f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
-        f_samples = np.random.normal(loc=np.pi**2/50, scale=0.06,size=500)
-        solVec = []
-        for i,sample in enumerate(f_samples):
-            uh, U, uh_np = self.solveFEM(sample,par_samples[i])
-            print("KLE PARAMETER NOT YET IMPLEMENTED!!!")
-            solVec.append(uh_np)
-        C_u = np.cov(solVec, rowvar=0, ddof=0)
-        
-        C_u_MC = C_u
-        ident = np.identity(np.shape(C_u)[0])
-        
-        return C_u_MC+ 9e-4*ident
-    
-    
-    def get_C_u_ROM_MC(self,freq,par_samples, V):
-        f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
-        f_samples = np.random.normal(loc=np.pi**2/50, scale=0.06,size=500)
-        solVec = []
-        for i,sample in enumerate(f_samples):
-            u,_ = self.getPriorAORA(V,[freq,sample,par_samples[i]])
-            solVec.append(u)
-        C_u = np.cov(solVec, rowvar=0, ddof=0)
-        
-        C_u_MC = C_u
-        ident = np.identity(np.shape(C_u)[0])
-        
-        return C_u_MC+ 9e-4*ident
 
 
 
@@ -149,20 +91,12 @@ class RBClass:
         """basic FEM solver for the Helmholtz equation 
         Gives the mean solution for the prior and expects the frequency and material constant.
         """
-        # Source amplitude
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*rhsPar
-        else:
-            Amp = 1
-            Amp = Amp*rhsPar
-
+        Amp = rhsPar
         c = 343
         k = 2 * np.pi * freq / c
         self.k = k
 
-    # approximation space polynomial degree
+        # approximation space polynomial degree
         deg = 1
         # Test and trial function space
         V = FunctionSpace(self.msh, ("CG", deg))
@@ -171,9 +105,6 @@ class RBClass:
         u = ufl.TrialFunction(V)
         v = ufl.TestFunction(V)
         self.v = v
-        f = Function(V)
-        f.interpolate(lambda x: Amp * k**2 * np.cos(k * x[0]) )#* np.cos(k * x[1]))
-        #f = Constant(msh, PETSc.ScalarType(A * k**2))
         f = Constant(self.msh, PETSc.ScalarType(Amp * k**2))
         self.f = f
 
@@ -267,94 +198,6 @@ class RBClass:
 
 
 
-    def doFEM(self,freq=10,rhsPar=1,mat_par=np.array([0])):
-        """basic FEM solver for the Helmholtz equation 
-        Gives the mean solution for the prior and expects the frequency and material constant.
-        """
-        # Source amplitude
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*rhsPar
-        else:
-            Amp = 1
-            Amp = Amp*rhsPar
-
-        c = 343
-        k = 2 * np.pi * freq / c
-        self.k = k
-
-        # approximation space polynomial degree
-        deg = 1
-        # Test and trial function space
-        V = FunctionSpace(self.msh, ("CG", deg))
-
-        # Define variational problem
-        u = ufl.TrialFunction(V)
-        v = ufl.TestFunction(V)
-        self.v = v
-        f = Function(V)
-        f.interpolate(lambda x: Amp * k**2 * np.cos(k * x[0]) )#* np.cos(k * x[1]))
-        #f = Constant(msh, PETSc.ScalarType(A * k**2))
-        f = Constant(self.msh, PETSc.ScalarType(Amp))
-        self.f = f
-
-        beta = k  
-
-        boundaries = [(1, lambda x: np.isclose(x[0], 0)),
-                    (2, lambda x: np.isclose(x[0], 1.0))]
-
-        facet_indices, facet_markers = [], []
-        fdim = self.msh.topology.dim - 1
-        for (marker, locator) in boundaries:
-            facets = locate_entities(self.msh, fdim, locator)
-            facet_indices.append(facets)
-            facet_markers.append(np.full_like(facets, marker))
-        facet_indices = np.hstack(facet_indices).astype(np.int32)
-        facet_markers = np.hstack(facet_markers).astype(np.int32)
-        sorted_facets = np.argsort(facet_indices)
-        facet_tag = meshtags(self.msh, fdim, facet_indices[sorted_facets], facet_markers[sorted_facets])
-
-
-        ds = Measure("ds", domain=self.msh, subdomain_data=facet_tag)
-        self.ds = ds
-
-
-        self.hetCoef = Function(self.V)
-        hetCoef_KLE = KLE_expression(mat_par.tolist(),self.coordinates)
-        self.hetCoef.interpolate(hetCoef_KLE.eval)
-        bcs = []
-        mass_form = - self.hetCoef * k**2 *ufl.inner(1,v)*ufl.dx
-        mass_form = inner(grad(u), grad(v)) * dx
-        a = inner(grad(u), grad(v)) * dx - self.hetCoef * k**2 * inner(u, v) * dx# - (0.1j*k*beta) * inner(u,v) * ds(2)
-        L = inner(f * k**2, v) * ds(1)
-        A = assemble_matrix(form(a))
-        A.assemble()
-        self.rhs = L
-
-        M = assemble_matrix(form(mass_form))
-
-        self.A = A
-        M.assemble()
-        self.M = M
-
-        # Compute solution
-        uh = Function(V)
-        uh.name = "u"
-        self.problem = LinearProblem(a, L, u=uh, bcs=bcs)
-
-
-
-    def solveFEM(self, rhsPar, matPar):
-        self.f.value = rhsPar
-        hetCoef_KLE = KLE_expression(matPar,self.coordinates)
-        self.hetCoef.interpolate(hetCoef_KLE.eval)
-        uh = self.problem.solve()
-
-        uh_np = uh.vector.getArray()
-        uh_np = np.copy(uh_np)
-        U = uh.vector
-        return uh, U, uh_np
 
 
     def getAr(self,V,A):
@@ -386,48 +229,11 @@ class RBClass:
 
 
     def getPriorAORA(self,V,par):
-
+        """ With a given projection matrix V and parameter sample, compute the ROM result
+        """
         A = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1]
-        ai, aj, av = A.getValuesCSR()
-        Asp = csr_matrix((av, aj, ai))
-        A = Asp.todense()
-        A_r = self.getAr(V,np.real(A))
-        ident = np.identity(np.shape(A_r)[0])
-        A_r_inv = np.linalg.solve(A_r, ident)
         c = 343
         k = 2 * np.pi * par[0] / c
-        if np.issubdtype(PETSc.ScalarType, np.complexfloating):
-            Amp = PETSc.ScalarType(1 + 1j)
-            Amp = 1
-            Amp = Amp*par[1]
-        else:
-            Amp = 1
-            Amp = Amp*par[1]
-        f = Constant(self.msh, PETSc.ScalarType(Amp * k**2))
-        self.f = f
-        lin = inner(f, self.v) * self.ds(1)
-        lin = inner(f * k**2, self.v) * self.ds(1)
-        b_mean = assemble_vector(form(lin))
-        b_mean.assemble()
-        b_mean_vec = b_mean.getArray()
-        self.b_mean_vec = b_mean_vec
-
-        self.b_mean_vec = self.FFnp
-        b_mean_vec_r = np.transpose(V)@b_mean_vec
-
-        self.C_f = self.get_C_f()
-        C_f = self.C_f
-        ident = np.identity(np.shape(C_f)[0])
-
-        C_f_red = np.transpose(V) @ C_f @ V
-        C_u_red = A_r_inv @ C_f_red @ np.transpose(A_r_inv)
-        ident = np.identity(np.shape(C_u_red)[0])
-        C_u = V @ C_u_red @ np.transpose(V)
-        ident = np.identity(np.shape(C_u)[0])
-        C_u = C_u + 1e-6*ident
-
-        u_mean_r = A_r_inv @ b_mean_vec_r
-        u_mean = V@u_mean_r
 
         Mr = V.T@self.Msp@V
         Dr = V.T@self.Dsp@V
@@ -439,7 +245,7 @@ class RBClass:
         self.u_mean_r = p_rom
         u_mean = p_rom_re
 
-        return (u_mean,C_u) 
+        return u_mean 
     
 
     def getLogPostMultiple(self,params,y_points,y_values,C_u,P,Pu):

@@ -52,13 +52,12 @@ class StatROM_1D:
     def reset(self,ne):
         """doc"""
         self.RBmodel.reset(ne=ne)
-        self.RBmodel.lowrank = False    # use lowrank statfem
         self.L = self.up.m  #5   	                    # size of basis
         self.par1 = self.up.f  #460                 # frequency
         self.par2 = 1.15#1.1011236
 
 
-    def snapshotsHandling(self,rhs_sp=None,mat_par=None):
+    def wrapper_AORA(self,rhs_sp=None,mat_par=None):
         self.V_AORA,self.V_adj_list = self.getAORAbasis(Nr=self.L,rhs_sp=rhs_sp,matCoef=mat_par)[0:2]
         self.V_AORA_mean,self.V_adj_list = self.getAORAbasis(Nr=self.L,rhs_sp=np.pi**2/50,matCoef=np.array([0,0,0]))[0:2]
 
@@ -82,9 +81,9 @@ class StatROM_1D:
 
 
     def generateParameterSamples(self,n_samp):   
-        """ sample the parameter space using QMC """   
-        diag_all = [5e-2 for _ in range(3)]
-        diag_all.insert(0,0.02**2)
+        """ sample the parameter space using QMC """ 
+        diag_all = [1.0 for _ in range(3)] # material parameter, standard normal, goes into KLE later
+        diag_all.insert(0,0.02**2)  # right hand side, Neumann
         g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=4),mean=[np.pi**2/50,0.0,0.0,0.0],covariance=np.diag(diag_all))
         all_par_samples = g_all.gen_samples(n_samp)
         self.f_samples = all_par_samples[:,0]
@@ -103,7 +102,7 @@ class StatROM_1D:
 
 
     def computeROMbasisSample(self,sample,i):
-        self.snapshotsHandling(rhs_sp=sample,mat_par=self.par_samples[i])
+        self.wrapper_AORA(rhs_sp=sample,mat_par=self.par_samples[i])
         self.saveBasis(self.V_AORA,self.V_adj_list,i)
 
 
@@ -116,27 +115,20 @@ class StatROM_1D:
                self.V_AORA_mean = np.load(fileArray)
 
 
-    def calcROMprior(self,multiple_bases = False):
+    def calcROMprior(self):
         """ Computes the prior mean and covariance for the ROM""" 
-        if multiple_bases == False:
-            (self.u_mean, self.C_u) = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,np.pi**2/50,np.array([0,0,0])])
-            C_u = self.RBmodel.get_C_u_ROM_MC(self.par1,self.V_AORA,self.par_samples)
-            self.u_mean = np.real(self.u_mean)
-            C_u = np.real(C_u)
-        else:
-            u_rom = []
-            d_rom = []
-            for i,sample in enumerate(self.f_samples):
-                self.loadBasis(i)
-                u,_ = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample,self.par_samples[i]])
-                u_rom.append(u)
-                dr = self.romErrorEst([self.par1,sample,self.par_samples[i]],ur=u,multiple_bases=True)
-                d_rom.append(dr)
-        
-            self.u_mean, _ = self.RBmodel.getPriorAORA(self.V_AORA_mean,[self.par1,np.pi**2/50,np.array([0,0,0])])
-            C_u = np.cov(np.array(u_rom), rowvar=0, ddof=0)
-            self.u_mean = np.mean(np.array(u_rom),axis=0)
-            self.dr_mean, self.dr_cov = self.errorGPnoisy(d_rom,self.y_points_error_est)
+        u_rom = []
+        d_rom = []
+        for i,sample in enumerate(self.f_samples):
+            self.loadBasis(i)
+            u = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample,self.par_samples[i]])
+            u_rom.append(u)
+            dr = self.romErrorEst([self.par1,sample,self.par_samples[i]],ur=u,multiple_bases=True)
+            d_rom.append(dr)
+    
+        C_u = np.cov(np.array(u_rom), rowvar=0, ddof=0)
+        self.u_mean = np.mean(np.array(u_rom),axis=0)
+        self.dr_mean, self.dr_cov = self.errorGPnoisy(d_rom,self.y_points_error_est)
         ident = np.identity(np.shape(C_u)[0])
         self.C_u = C_u + 9e-11*ident #-4
         
@@ -150,45 +142,25 @@ class StatROM_1D:
         """ Computes a data generating solution and samples noisy data from it at sensor points.
             Also handles the error estimator training points positions.    
         """
-        n_sens = self.up.ns #11 
+        n_sens = self.up.ns
         self.n_sens = n_sens
 
         size_fine = np.shape(self.RBmodel.coordinates)[0]-1
         idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int)
-        n_error_est = self.up.n_est #12
+        n_error_est = self.up.n_est 
         idx_error_est = np.round(np.linspace(1, self.RBmodel.ne, n_error_est)).astype(int)
 
-        self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]
+        self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx] # sensor locations
 
-        self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_error_est]
+        self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_error_est] # training points for the error estimator
 
         values_at_indices = [solution[x]+0.0 for x in idx]
-        n_obs = self.up.no #200 
+        n_obs = self.up.no
         self.n_obs = n_obs
         self.RBmodel.no = n_obs
         y_values_list = []
-        sqdist = scipy.spatial.distance.cdist(self.RBmodel.coordinates, self.RBmodel.coordinates, 'sqeuclidean')
-        c_z=0.03* np.exp(-2 * sqdist)
-        C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
         self.RBmodel.get_C_f()
-        for i in range(self.RBmodel.ne+1):
-            for j in range(self.RBmodel.ne+1):
-                C_z[i,j] = self.RBmodel.integratedTestF[i] * c_z[i,j] * self.RBmodel.integratedTestF[j]
-        A = self.RBmodel.A
-        ai, aj, av = A.getValuesCSR()
-        Asp = csr_matrix((av, aj, ai))
-        A = Asp.todense()
 
-        ident = np.identity(np.shape(A)[0])
-        A_inv = np.linalg.solve(A,ident)
-
-        M = self.RBmodel.M
-        mi, mj, mv = M.getValuesCSR()
-        Msp = csr_matrix((mv, mj, mi))
-        M = Msp.todense()
-        c_z = M@c_z@M.T
-        C_z = np.zeros((self.RBmodel.ne+1,self.RBmodel.ne+1))
-        C_z = np.dot( np.dot(A_inv,c_z), np.transpose(A_inv))
         for i in range(n_obs):
             y_values_list.append([x+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)]) #1e-1
         a = np.array(y_values_list)
@@ -289,6 +261,11 @@ class StatROM_1D:
     
 
     def errorGPnoisy(self,dr,y_points):
+        """ Computes the GP regression for the ROM error
+            given the approximative adjoint solution for
+            the error at given points, 
+            variant for with multiple samples of d_r
+        """
         n_obs = np.shape(dr)[0]
         dr_mean = np.mean(np.real(dr),axis=0)
         dr_sum = np.sum(np.real(dr),axis=0)
@@ -298,10 +275,10 @@ class StatROM_1D:
         ident_coord = np.identity(len(self.RBmodel.coordinates))
         y_points = np.array(y_points)
 
+        # simple way to choose hyperparameters
         l = 343/self.par1/1
         sig = np.max(np.abs(dr))*1.0
 
-        prior_mean = np.zeros(np.shape(self.u_mean))
         prior_cov = kernels.periodic(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=l,sigf=sig,p=2.5) +1e-15*ident_coord
 
         data_kernel = kernels.periodic(y_points,y_points,lf=l,sigf=sig,p=2.5)*n_obs+dr_cov#+1e-8*ident_y
@@ -311,33 +288,6 @@ class StatROM_1D:
         post_mean = solved @ dr_sum
         post_cov = prior_cov - n_obs*(solved@mixed_kernel)
 
-        ys_post = np.random.multivariate_normal(
-        mean=np.real(post_mean), cov=np.real(post_cov), 
-        size=5)
-        fig = plt.figure(figsize=(6, 4))
-        for i in range(5):
-            plt.plot(self.RBmodel.coordinates, ys_post[i], linestyle='--')
-        plt.plot(self.RBmodel.coordinates, post_mean, linestyle='-')
-        for d in dr:
-            plt.scatter(y_points,d)
-        plt.xlabel('$x$', fontsize=13)
-        plt.ylabel('$y = f(x)$', fontsize=13)
-        plt.title((
-            '5 different function realizations at n points\n'
-            'sampled from a Gaussian process with exponentiated quadratic kernel'))
-        fig.savefig("Results/error_GP.pdf", bbox_inches='tight')
-
-        fig = plt.figure(figsize=(6, 4))
-        for i in range(5):
-            plt.plot(self.RBmodel.coordinates, ys_post[i], linestyle='--')
-        plt.plot(self.RBmodel.coordinates, post_mean, linestyle='-')
-        plt.scatter(y_points,dr_mean)
-        plt.xlabel('$x$', fontsize=13)
-        plt.ylabel('$y = f(x)$', fontsize=13)
-        plt.title((
-            'estimated ROM error'))
-        fig.savefig("Results/error_GP.pdf", bbox_inches='tight')
-
         with open('Results/dr_cov.npy', 'wb') as fileArray:
             np.save(fileArray,post_cov)
 
@@ -345,6 +295,9 @@ class StatROM_1D:
 
 
     def getEasyROMPosterior(self):
+        """ compute the statFEM posterior in the classical way.
+            The ROM prior is used but no correction terms.
+        """
         print("Classical ROM posterior START")
         (u_mean_y_easy, C_u_y_easy, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list,self.u_mean,self.C_u)
         self.C_u_y_easy_Diag = np.sqrt(np.diagonal(C_u_y_easy))
@@ -355,39 +308,35 @@ class StatROM_1D:
         return u_mean_y_easy, C_u_y_easy
 
 
-    def getAdvancedROMPosterior(self):
-        # compute Posterior with ROM prior and ROM error within the data model
-        print("Advanced ROM posterior START")
+    def getCorrectedROMPosterior(self):
+        """ compute the statFEM posterior in the new way, as proposed in our paper.
+            The ROM prior is used with correction terms.
+        """
+        print("Corrected ROM posterior START")
         (u_mean_y, C_u_y, u_mean_y_pred_rom, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list,self.u_mean,self.C_u,self.dr_mean,self.dr_cov)
         self.C_u_y_Diag = np.sqrt(np.diagonal(C_u_y))
-        print("Advanced ROM posterior FINISH")
+        print("Corrected ROM posterior FINISH")
         self.u_mean_y, self.C_u_y = u_mean_y, C_u_y
         self.u_mean_y_pred_rom = u_mean_y_pred_rom
         self.sigd_adv = np.copy(self.RBmodel.sigdROM)
         return u_mean_y, C_u_y
 
 
-    def getFullOrderPrior(self,multiple_bases = False):
+    def getFullOrderPrior(self):
         # prior calculation Full Order Model
-        if multiple_bases == False:
-            u_mean_std = self.RBmodel.get_U_mean_standard(np.pi**2/50)
-            self.u_mean_std,self.C_u_std = u_mean_std, None
-        else:
-            u = []
-            for i,samp in enumerate(self.f_samples):
-                self.RBmodel.doFEM(freq=self.par1,rhsPar=samp,mat_par=self.par_samples[i])
-                _, _, ui  = self.RBmodel.solveFEM(rhsPar=samp,matPar = self.par_samples[i])
-                u.append(ui)
-           
-            u_mean_std = self.RBmodel.get_U_mean_standard(np.pi**2/50)
-            u_mean_std = np.mean(np.array(u),axis=0)
-            C_u_std = np.cov(np.array(u), rowvar=0, ddof=0)
-            ident = np.identity(np.shape(C_u_std)[0])
-            C_u_std = C_u_std + 9e-11*ident  #-4
-            self.C_u_stdDiag = np.sqrt(np.diagonal(C_u_std))
+        u = []
+        for i,samp in enumerate(self.f_samples):
+            _, _, ui  = self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp,mat_par=self.par_samples[i])
+            u.append(ui)
+        
+        u_mean_std = np.mean(np.array(u),axis=0)
+        C_u_std = np.cov(np.array(u), rowvar=0, ddof=0)
+        ident = np.identity(np.shape(C_u_std)[0])
+        C_u_std = C_u_std + 9e-11*ident  #-4
+        self.C_u_stdDiag = np.sqrt(np.diagonal(C_u_std))
 
-            self.u_mean_std,self.C_u_std = u_mean_std,C_u_std
-            return u_mean_std,C_u_std
+        self.u_mean_std,self.C_u_std = u_mean_std,C_u_std
+        return u_mean_std,C_u_std
 
 
     def getFullOrderPosterior(self):
@@ -528,23 +477,24 @@ class StatROM_1D:
 
 
 
-    def plotPriorPosteriorComparison(self):
+    def plotPriorPosteriorComparison(self,prior=True,posterior=True):
         fig = plt.figure(figsize=(6,3), dpi=300)
-
-        plt.plot(self.RBmodel.coordinates, self.u_mean_std, linestyle='-', color = 'red',lw = 1.0, label='Prior FEM')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_std)+1.96*self.C_u_stdDiag, np.transpose(self.u_mean_std)-1.96*self.C_u_stdDiag,color = 'red',alpha=0.1)
-
-        plt.plot(self.RBmodel.coordinates, self.u_mean, linestyle='-', color = 'green',lw = 1.0, label='Prior ROM')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean)+1.96*self.C_uDiag, np.transpose(self.u_mean)-1.96*self.C_uDiag,color = 'green',alpha=0.1)
         
-        plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_std), linestyle='-', color = 'blue',lw = 1.5,label='Posterior mean FEM')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_std)+1.96*self.C_u_y_std_Diag, np.transpose(self.u_mean_y_std)-1.96*self.C_u_y_std_Diag,color = 'blue',alpha=0.1)
+        if prior == True:
+            plt.plot(self.RBmodel.coordinates, self.u_mean_std, linestyle='-', color = 'red',lw = 1.0, label='Prior FEM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_std)+1.96*self.C_u_stdDiag, np.transpose(self.u_mean_std)-1.96*self.C_u_stdDiag,color = 'red',alpha=0.1)
 
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_easy)+1.96*self.C_u_y_easy_Diag, np.transpose(self.u_mean_y_easy)-1.96*self.C_u_y_easy_Diag,color = 'goldenrod',alpha=0.1,label='$2\sigma$ Posterior w/o ROM error')
-        plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_easy), linestyle='-', color = 'goldenrod',lw = 1.5,label='Posterior mean ROM w/o rom error')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_pred_rom)+1.96*self.C_u_y_Diag, np.transpose(self.u_mean_y_pred_rom)-1.96*self.C_u_y_Diag,color = 'purple',alpha=0.1,label='$2\sigma$ Posterior with ROM error')
-        plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_pred_rom), linestyle='--', color = 'purple',lw = 1.5,label='Posterior mean ROM with rom error')
-        
+            plt.plot(self.RBmodel.coordinates, self.u_mean, linestyle='-', color = 'green',lw = 1.0, label='Prior ROM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean)+1.96*self.C_uDiag, np.transpose(self.u_mean)-1.96*self.C_uDiag,color = 'green',alpha=0.1)
+        if posterior == True:
+            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_std), linestyle='-', color = 'blue',lw = 1.5,label='Posterior mean FEM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_std)+1.96*self.C_u_y_std_Diag, np.transpose(self.u_mean_y_std)-1.96*self.C_u_y_std_Diag,color = 'blue',alpha=0.1)
+
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_easy)+1.96*self.C_u_y_easy_Diag, np.transpose(self.u_mean_y_easy)-1.96*self.C_u_y_easy_Diag,color = 'goldenrod',alpha=0.1,label='$2\sigma$ Posterior w/o ROM error')
+            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_easy), linestyle='-', color = 'goldenrod',lw = 1.5,label='Posterior mean ROM w/o rom error')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_pred_rom)+1.96*self.C_u_y_Diag, np.transpose(self.u_mean_y_pred_rom)-1.96*self.C_u_y_Diag,color = 'purple',alpha=0.1,label='$2\sigma$ Posterior with ROM error')
+            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_pred_rom), linestyle='--', color = 'purple',lw = 1.5,label='Posterior mean ROM with rom error')
+            
         print("proposed statROM on ROM prior posterior error:")
         norm,_ = self.computeErrorNorm(self.u_mean_y_pred_rom,self.true_process)
         print(norm)
@@ -559,7 +509,7 @@ class StatROM_1D:
 
         for obs in self.y_values_list:
             plt.scatter(self.y_points, obs,s=5, color = 'red',alpha=0.6)
-        plt.ylabel("$p(x)$")
+        plt.ylabel("$pressure [Pa]$")
         plt.xlabel("$x$")
 
         plt.grid()
@@ -578,38 +528,6 @@ class StatROM_1D:
         plt.legend()
         fig.savefig("./Results/ROMerror.pdf", bbox_inches='tight')
  
-
-
-
-
-
-
-if __name__ == '__main__':
-    funcs = StatROM_1D()
-
-    funcs.switchMesh("ground_truth")
-    funcs.RBmodel.doFEM(freq=funcs.par1,rhsPar=np.pi**2/50,mat_par=np.array([0,0,0]))
-    funcs.generateParameterSamples(256)
-    funcs.getFullOrderPrior(multiple_bases = True)
-    
-    funcs.get_noisy_data_from_solution(0,np.real(funcs.u_mean_std))
-    funcs.switchMesh("coarse")
-    
-    for i,sample in enumerate(funcs.f_samples):
-        print("computing basis for sample no. "+str(i))
-        funcs.computeROMbasisSample(sample,i)
-
-    funcs.getFullOrderPrior(multiple_bases = True)
-
-    funcs.calcROMprior(multiple_bases = True)
-    
-    funcs.getFullOrderPosterior()
-    funcs.getEasyROMPosterior()
-    funcs.getAdvancedROMPosterior()
-
-    funcs.saveData()
-    funcs.plotPriorPosteriorComparison()
-    funcs.plotRomError()
 
 
     
