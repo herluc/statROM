@@ -8,7 +8,7 @@ from assemble_matrix_derivative import assemble_matrix_derivative
 ###
 # python adaptation of the MATLAB code by M. Bollhöfer, TU Braunschweig
 ###
-
+# auskommentiere Zeilen löschen?
 def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
 
     SOAR = 1

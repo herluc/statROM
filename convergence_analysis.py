@@ -24,7 +24,8 @@ plt.rcParams.update({
     'text.latex.preamble': r'\usepackage{amsfonts}'})
 funcs = Selftest()
 
-
+# auskommentiere Zeilen löschen?
+# lassen sich nicht die beiden files convergence_analysis files zusammen fassen?
 class ConvergenceTester:
     """class which stores all necessary methods for convergence testing"""
 

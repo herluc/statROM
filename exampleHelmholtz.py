@@ -150,12 +150,13 @@ class StatROM_1D:
         """ Computes a data generating solution and samples noisy data from it at sensor points.
             Also handles the error estimator training points positions.    
         """
-        n_sens = self.up.ns #11 
+        # vielleicht eine unterteilung (kommentar/Methode)
+        n_sens = self.up.ns 
         self.n_sens = n_sens
 
         size_fine = np.shape(self.RBmodel.coordinates)[0]-1
         idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int)
-        n_error_est = self.up.n_est #12
+        n_error_est = self.up.n_est
         idx_error_est = np.round(np.linspace(1, self.RBmodel.ne, n_error_est)).astype(int)
 
         self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx]
@@ -163,7 +164,7 @@ class StatROM_1D:
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_error_est]
 
         values_at_indices = [solution[x]+0.0 for x in idx]
-        n_obs = self.up.no #200 
+        n_obs = self.up.no  
         self.n_obs = n_obs
         self.RBmodel.no = n_obs
         y_values_list = []
@@ -289,6 +290,7 @@ class StatROM_1D:
     
 
     def errorGPnoisy(self,dr,y_points):
+        # doc string
         n_obs = np.shape(dr)[0]
         dr_mean = np.mean(np.real(dr),axis=0)
         dr_sum = np.sum(np.real(dr),axis=0)
@@ -345,6 +347,7 @@ class StatROM_1D:
 
 
     def getEasyROMPosterior(self):
+        #docstring
         print("Classical ROM posterior START")
         (u_mean_y_easy, C_u_y_easy, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list,self.u_mean,self.C_u)
         self.C_u_y_easy_Diag = np.sqrt(np.diagonal(C_u_y_easy))
@@ -356,7 +359,7 @@ class StatROM_1D:
 
 
     def getAdvancedROMPosterior(self):
-        # compute Posterior with ROM prior and ROM error within the data model
+        # make docstring: compute Posterior with ROM prior and ROM error within the data model
         print("Advanced ROM posterior START")
         (u_mean_y, C_u_y, u_mean_y_pred_rom, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list,self.u_mean,self.C_u,self.dr_mean,self.dr_cov)
         self.C_u_y_Diag = np.sqrt(np.diagonal(C_u_y))
@@ -368,7 +371,7 @@ class StatROM_1D:
 
 
     def getFullOrderPrior(self,multiple_bases = False):
-        # prior calculation Full Order Model
+        # make docstring: prior calculation Full Order Model
         if multiple_bases == False:
             u_mean_std = self.RBmodel.get_U_mean_standard(np.pi**2/50)
             self.u_mean_std,self.C_u_std = u_mean_std, None
@@ -404,6 +407,7 @@ class StatROM_1D:
 
 
     def computeErrorNorm(self,solution,reference):
+        # docstring
         bar_p_sq = 0
         for p in solution:
             val = np.sqrt(np.abs(p*p))

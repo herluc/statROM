@@ -24,7 +24,7 @@ import os
 usr_home = os.getenv("HOME")
 
 
-
+# kommentare wie bei RB_solcer.py
 
 class RBClass:
     """solver class for a reduced basis statFEM approach"""

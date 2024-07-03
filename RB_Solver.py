@@ -81,6 +81,7 @@ class RBClass:
         self.msh_ground_truth = create_interval(MPI.COMM_WORLD,self.up.n_fine,[0.0,1.0]) #define fine mesh for ground truth
         self.msh = self.msh_coarse
 
+        # vielleicht noch weitere kommentare zu den konstaten Parametern
         self.rho = 1.2
         self.f = 1500
         c = 343
@@ -114,6 +115,7 @@ class RBClass:
 
 
     def get_C_u_MC(self,par_samples):
+        # docstring
         f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
         f_samples = np.random.normal(loc=np.pi**2/50, scale=0.06,size=500)
         solVec = []
@@ -130,6 +132,7 @@ class RBClass:
     
     
     def get_C_u_ROM_MC(self,freq,par_samples, V):
+        # docstring
         f_samples = np.random.normal(loc=np.pi**2/5, scale=0.3,size=500)
         f_samples = np.random.normal(loc=np.pi**2/50, scale=0.06,size=500)
         solVec = []
@@ -162,7 +165,7 @@ class RBClass:
         k = 2 * np.pi * freq / c
         self.k = k
 
-    # approximation space polynomial degree
+        # approximation space polynomial degree
         deg = 1
         # Test and trial function space
         V = FunctionSpace(self.msh, ("CG", deg))
@@ -271,6 +274,8 @@ class RBClass:
         """basic FEM solver for the Helmholtz equation 
         Gives the mean solution for the prior and expects the frequency and material constant.
         """
+
+        # ähnlicher part wie oben bei doFEMHelmholtz, vll. eigene Methode?
         # Source amplitude
         if np.issubdtype(PETSc.ScalarType, np.complexfloating):
             Amp = PETSc.ScalarType(1 + 1j)
@@ -346,6 +351,7 @@ class RBClass:
 
 
     def solveFEM(self, rhsPar, matPar):
+        # docstring
         self.f.value = rhsPar
         hetCoef_KLE = KLE_expression(matPar,self.coordinates)
         self.hetCoef.interpolate(hetCoef_KLE.eval)
@@ -386,7 +392,8 @@ class RBClass:
 
 
     def getPriorAORA(self,V,par):
-
+        # docstring
+        # vll. unteteilen mit Kommentare/Methoden
         A = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1]
         ai, aj, av = A.getValuesCSR()
         Asp = csr_matrix((av, aj, ai))
@@ -612,6 +619,7 @@ class RBClass:
         returns the posterior GP
         here, y_values is a vector of different measurement sets. 
         """
+        # unterteilung in mehrere Kommentare/Methoden?
         C_e = self.get_C_e(len(y_points))
         P = self.getP(y_points)
         self.C_e = C_e
@@ -651,6 +659,7 @@ class RBClass:
         returns the posterior GP
         here, y_values is a vector of different measurement sets. 
         """
+        # unterteilung in mehrere Kommentare/Methoden?
         C_e = self.get_C_e(len(y_points))
         P = self.getP(y_points)
         self.C_e = C_e

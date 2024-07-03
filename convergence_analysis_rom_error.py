@@ -24,7 +24,7 @@ plt.rcParams.update({
     'text.latex.preamble': r'\usepackage{amsfonts}'})
 funcs = Selftest()
 
-
+# auskommentiere Zeilen löschen?
 class ConvergenceTester:
     """class which stores all necessary methods for convergence testing"""
 
@@ -401,7 +401,7 @@ class ConvergenceTester:
 
 
         
-
+    # vielleicht nicht Stuff sondern plotConvergence o.Ä.?
     def plotStuff(self):
         #fig = plt.figure(figsize=(3,2))
         #plt.plot(self.high_res_ref)

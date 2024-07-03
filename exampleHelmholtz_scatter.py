@@ -29,7 +29,8 @@ plt.rcParams.update({
 plt.rc('text', usetex=True)
 plt.rc('text.latex',  preamble=r'\usepackage{amsmath}\usepackage[utf8]{inputenc}')
 
-
+# auskommentierte Zeilen löschen?
+# eine super class um gemeinsame methods nur einmal zu implementieren?
 
 class StatROM_2D:
     """ 
@@ -413,6 +414,7 @@ class StatROM_2D:
 
 
     def getEasyROMPosterior(self):
+        # docstring
         print("Classical ROM posterior START")
         (u_mean_y_easy_real, C_u_y_easy_real, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_real,np.real(self.u_mean),self.C_u_real)
         (u_mean_y_easy_imag, C_u_y_easy_imag, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_imag,np.imag(self.u_mean),self.C_u_imag)
@@ -425,7 +427,7 @@ class StatROM_2D:
         return self.u_mean_y_easy, self.C_u_y_easy
 
     def getAdvancedROMPosterior(self):
-        # compute Posterior with ROM prior and ROM error within the data model
+        # make docstring: compute Posterior with ROM prior and ROM error within the data model
         print("Advanced ROM posterior START")
         (u_mean_y_real, C_u_y_real, u_mean_y_pred_rom_real, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list_real,np.real(self.u_mean),self.C_u_real,self.dr_mean_real,self.dr_cov_real)
         (u_mean_y_imag, C_u_y_imag, u_mean_y_pred_rom_imag, postGP) = self.RBmodel.computePosteriorROM(self.y_points,self.y_values_list_imag,np.imag(self.u_mean),self.C_u_imag,self.dr_mean_imag,self.dr_cov_imag)
@@ -438,7 +440,7 @@ class StatROM_2D:
 
 
     def getFullOrderPrior(self,multiple_bases = False):
-        # prior calculation Full Order Model
+        # make docstring: prior calculation Full Order Model
         if multiple_bases == False:
             u_mean_std = np.abs(self.RBmodel.get_U_mean_standard([0,0]) - self.RBmodel.ui.x.array)#+2
             self.u_mean_test = u_mean_std
@@ -486,7 +488,7 @@ class StatROM_2D:
 
 
     def computeErrorNorm(self,solution,reference):
-
+        # docstring
         bar_p_sq = 0
         for p in solution:
             val = np.sqrt(np.abs(p*p))
