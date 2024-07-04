@@ -1,4 +1,5 @@
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.12654214.svg)](https://doi.org/10.5281/zenodo.12654214)
 # statROM
 
 This is Python code to reproduce the results in our reduced order model statFEM paper.
