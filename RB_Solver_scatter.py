@@ -27,7 +27,7 @@ usr_home = os.getenv("HOME")
 
 
 class RBClass:
-    """solver class for a reduced basis statFEM approach"""
+    """solver class for a reduced order statFEM approach"""
 
     def __init__(self,up):
         self.up = up

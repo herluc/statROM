@@ -62,9 +62,9 @@ class KLE_expression:
 
 
 class RBClass:
-    """solver class for a reduced basis statFEM approach"""
+    """solver class for a reduced order statFEM approach"""
 
-    def __init__(self,up,ne=100):
+    def __init__(self,up):
         self.problem = None
         self.up = up
         self.reset(up.n)
@@ -136,7 +136,7 @@ class RBClass:
         hetCoef_KLE = KLE_expression(mat_par.tolist(),self.coordinates)
         self.hetCoef.interpolate(hetCoef_KLE.eval)
         
-        a = inner(grad(u), grad(v)) * dx - self.hetCoef * k**2 * inner(u, v) * dx# - (0.1j*k*beta) * inner(u,v) * ds(2)
+        a = inner(grad(u), grad(v)) * dx - self.hetCoef * k**2 * inner(u, v) * dx
         L = inner(f, v) * ds(1)
         A = assemble_matrix(form(a))
         A.assemble()

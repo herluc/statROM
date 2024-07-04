@@ -501,25 +501,25 @@ class StatROM_2D:
         import dolfinx.io
         u_fem = self.u_mean_std
         u_rom = self.u_mean
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_mean.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = u_fem
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_total_field.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_physical_field.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.abs(u_fem)
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_cov.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_variance.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_u_stdDiag
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_cov_total_field.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorFEM_variance_physical_field.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.abs(self.C_u_stdDiag)
@@ -536,13 +536,13 @@ class StatROM_2D:
         figure.savefig("./Results/cov_std.pdf", bbox_inches='tight')
         plt.close(figure)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorROM_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorROM_mean.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = u_rom
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorROM_cov.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/priorROM_variance.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_uDiag
@@ -555,13 +555,13 @@ class StatROM_2D:
         figure.savefig("./Results/cov_rom.pdf", bbox_inches='tight')
         plt.close(figure)
             
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_cov_est.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_variance_estimated.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.sqrt(np.diagonal(self.dr_cov_real + 1j*self.dr_cov_imag))
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_est.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_estimated.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.dr_mean_real+1j*self.dr_mean_imag
@@ -573,19 +573,19 @@ class StatROM_2D:
             ut.x.array[:] = u_fem-u_rom
             xdmf.write_function(ut)
         
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_exact_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_exact_physical_field.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.abs(u_fem-u_rom)
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_var_exact_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_variance_exact_physical_field.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.abs(self.C_u_stdDiag-self.C_uDiag)
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_est_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_estimated_physical_field.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = np.abs(self.dr_mean_real+1j*self.dr_mean_imag)
@@ -599,52 +599,52 @@ class StatROM_2D:
         u_rom_easy = self.u_mean_y_easy
         u_rom_adv = self.u_mean_y_pred_rom
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postFEM_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorFEM_mean.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = u_fem
             xdmf.write_function(ut)
         
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postFEM_cov.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorFEM_variance.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_u_y_std_Diag
             xdmf.write_function(ut)
         
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postROM_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorROM_mean.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = u_rom_easy
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postROM_cov.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorROM_variance.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_u_y_easy_Diag
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postAdvROM_total.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorCorrectedROM_mean.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = u_rom_adv
             xdmf.write_function(ut)
 
-        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postAdvROM_cov.xdmf", "w") as xdmf:
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorCorrectedROM_variance.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_u_y_Diag
             xdmf.write_function(ut)
     
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorAdv.xdmf", "w") as xdmf:
-            print("adv norm:")
+            print("proposed statROM on ROM prior posterior error:")
             print(self.computeErrorNorm(u_rom_adv,self.data_solution))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorEasy.xdmf", "w") as xdmf:
-            print("easy norm:")
+            print("classical statFEM on ROM prior posterior error:")
             print(self.computeErrorNorm(u_rom_easy,self.data_solution))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorFem.xdmf", "w") as xdmf:
-            print("fem norm:")
+            print("classical statFEM on FEM prior posterior error (reference):")
             print(self.computeErrorNorm(u_fem,self.data_solution))
 
 
