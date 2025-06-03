@@ -6,13 +6,19 @@ This is Python code to reproduce the results in our reduced order model statFEM 
 
 
 ## Usage
-To be able to run the code, FEniCSx (https://fenicsproject.org) is required as a FEM backend. We recommend using the dolfinx Docker image. A suitable Dockerfile and VSCode .devcontainer configuration is given. Make sure that Docker is installed and running on your machine and, if you want to use VSCode, that the devcontainers extension is installed.
+To be able to run the code, FEniCSx (https://fenicsproject.org) is required as a FEM backend. We recommend using the dolfinx Docker image in version 0.6.0. A suitable Dockerfile and VSCode .devcontainer configuration is given. To install the container image in VSCode, follow these steps:
 
-Run
-```bash
-source dolfinx-complex-mode
+- Make sure that Docker is installed and running on your machine
+- Make sure that the devcontainers extension is installed within VSCode
+- Open the project folder in VSCode
+- Click on "Reopen in Container" when prompted (otherwise press F1 and search for "Reopen in Container")
+- The container should now be built automatically according to the information given in the Dockerfile. This can take a while.
 
-```
+ Run
+  ```bash
+  source dolfinx-complex-mode
+  
+  ```
 in your terminal before trying our examples to enable complex numbers in FEniCSx.
 
 
@@ -47,7 +53,7 @@ classical statFEM on FEM prior posterior error (reference):
 ```
 which are the error norms of the proposed method, the classical statFEM on a ROM prior and the statFEM on FEM baseline.
 
-In the Results folder, in the 1D case an overview plot with priors, posteriors and data will be saved. The desired pltos can easily be chosen in the demo script. In the 2D example, a number of .xdmf files, which can be viewd with ParaView, will be saved. The most interesting ones are:
+In the Results folder, in the 1D case an overview plot with priors, posteriors and data will be saved. The desired plots can easily be chosen in the demo script. In the 2D example, a number of .xdmf files, which can be viewd with ParaView, will be saved. The most interesting ones are:
 - ROM_error_mean_estimated.xdmf (adjoint GP estimate of the ROM error)
 - ROM_error_mean_exact.xdmf (exact ROM error as a reference)
 - posteriorFEM_mean.xdmf (Full order reference posterior mean)
