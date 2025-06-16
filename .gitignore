@@ -6,6 +6,11 @@
 parameters.txt
 *.xdmf
 *.h5
+*.jpeg
+*.jpg
+*.vtk
+*.vtu
+*paper/
 
 !f_samples.npy
 !f_samples_im.npy

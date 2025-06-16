@@ -23,6 +23,8 @@ from meshesHelmholtz import generate_mesh_with_obstacle
 import os
 usr_home = os.getenv("HOME")
 
+import time
+
 
 
 
@@ -35,7 +37,7 @@ class RBClass:
 
 
     def reset(self):
-        """ Generates meshes using gmsh and computed the corresponding function spaces
+        """ Generates meshes using gmsh and computes the corresponding function spaces
             with FEniCSx.
         """
         # approximation space polynomial degree
@@ -48,7 +50,7 @@ class RBClass:
                  Lx=L,
                  Ly=H,
                  lc=lc,
-                 refine = 0.04)
+                 refine = 0.04)#0.04
         
         self.msh_ground_truth, self.cell_markers_ground_truth, self.facet_markers_ground_truth  = generate_mesh_with_obstacle(
                  Lx=L,
@@ -64,6 +66,8 @@ class RBClass:
 
         self.V_ground_truth = FunctionSpace(self.msh_ground_truth, ("CG", deg)) # Function space
         self.coordinates_ground_truth = self.V_ground_truth.tabulate_dof_coordinates()[:,0:2]
+        self.times_reducedorder = []
+        
 
 
 
@@ -173,11 +177,14 @@ class RBClass:
         
 
     def solveFEM(self, rhsPar):
-        uh = self.problem.solve()
-        uh_np = uh.vector.getArray()
-        uh_np = np.copy(uh_np)
-        U = uh.vector
-        return uh, U, uh_np
+     #   uh = self.problem.solve()
+     #   uh_np = uh.vector.getArray()
+     #   uh_np = np.copy(uh_np)
+     #   U = uh.vector
+        p_full = spsolve(self.A,self.FFnp)
+        uh_np = p_full
+        #return uh, U, uh_np
+        return None, None, uh_np
     
 
     def solveFEMData(self,sample):
@@ -229,7 +236,7 @@ class RBClass:
         for i in range(dim):
             for j in range(dim):
                 C_f[i,j] = self.integratedTestF[i] * c_f[i,j] * self.integratedTestF[j]
-        return C_f
+        return csr_matrix(C_f)
     
 
 
@@ -237,17 +244,25 @@ class RBClass:
     def getPriorAORA(self,V,par):
         """ With a given projection matrix V and parameter sample, compute the ROM result
         """
+        
         _ = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1]
+        start = time.time() 
         c = 340
         k = 2 * np.pi * par[0] / c
-
-        Mr = V.conj().T@self.Msp@V
-        Dr = V.conj().T@self.Dsp@V
-        Kr = V.conj().T@self.KKsp@V
-        Fr=V.conj().T@self.FFnp
+        V_H = V.conj().T
+        Mr = V_H@self.Msp@V
+        Dr = V_H@self.Dsp@V
+        Kr = V_H@self.KKsp@V
+        Fr=V_H@self.FFnp
         Asp_rom = k*k*Mr + k*Dr+ Kr
+        
         p_rom = spsolve(Asp_rom,Fr)
         p_rom_re = V@p_rom
+        end = time.time()
+        print("ROM single solve:")
+        duration = end - start
+        self.times_reducedorder.append(duration)
+        print(duration)
         self.u_mean_r = p_rom
         u_mean = p_rom_re
 
@@ -326,6 +341,7 @@ class RBClass:
             y = y_values - rho * Pu - rho*mean_d_r  
             K_y_inv_y = cho_solve(L, y)
 
+            Log_K_y_det = 2 * np.sum(np.log(np.diag(L[0])))
             logpost2 = 0.5 * (-np.dot(np.transpose(y), K_y_inv_y )  -Log_K_y_det - ny * np.log(2* np.pi))
             logpost = logpost + logpost2
             i=i+1
@@ -350,9 +366,9 @@ class RBClass:
         sigd_est = np.log(0.01)
         ld_est = np.log(0.5)
         if ROM == False:
-            result = scipy.optimize.minimize(fun=self.getLogPostMultiple,method='L-BFGS-B',bounds=((-2,1),(-15,2),(-20,5)),x0=np.array([rho_est,sigd_est,ld_est]),args=(y_points, y_values,C_u,P,Pu),tol=1e-4)
+            result = scipy.optimize.minimize(fun=self.getLogPostMultiple,method='L-BFGS-B',bounds=((-2,1),(-15,2),(-20,5)),x0=np.array([rho_est,sigd_est,ld_est]),args=(y_points, y_values,C_u,P,Pu),tol=1e-8)
         elif ROM == True:
-            result = scipy.optimize.minimize(fun=self.getLogLikelihoodROM,method='L-BFGS-B',bounds=((-2,1),(-15,2),(-20,5)),x0=np.array([rho_est,sigd_est,ld_est]),args=(y_points, y_values,C_u,CROM,dROM,P,Pu),tol=1e-4)
+            result = scipy.optimize.minimize(fun=self.getLogLikelihoodROM,method='L-BFGS-B',bounds=((-2,1),(-15,2),(-20,5)),x0=np.array([rho_est,sigd_est,ld_est]),args=(y_points, y_values,C_u,CROM,dROM,P,Pu),tol=1e-8)
         print("Results optimizer:")
         print(result.x)
         print(result.success)

@@ -492,9 +492,9 @@ class StatROM_1D:
             plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_std), linestyle='-', color = 'blue',lw = 1.5,label='Posterior mean FEM')
             plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_std)+1.96*self.C_u_y_std_Diag, np.transpose(self.u_mean_y_std)-1.96*self.C_u_y_std_Diag,color = 'blue',alpha=0.1)
 
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_easy)+1.96*self.C_u_y_easy_Diag, np.transpose(self.u_mean_y_easy)-1.96*self.C_u_y_easy_Diag,color = 'goldenrod',alpha=0.1,label='$2\sigma$ Posterior w/o ROM error')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_easy)+1.96*self.C_u_y_easy_Diag, np.transpose(self.u_mean_y_easy)-1.96*self.C_u_y_easy_Diag,color = 'goldenrod',alpha=0.1,label='$2sigma$ Posterior w/o ROM error')
             plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_easy), linestyle='-', color = 'goldenrod',lw = 1.5,label='Posterior mean ROM w/o rom error')
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_pred_rom)+1.96*self.C_u_y_Diag, np.transpose(self.u_mean_y_pred_rom)-1.96*self.C_u_y_Diag,color = 'purple',alpha=0.1,label='$2\sigma$ Posterior with ROM error')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_pred_rom)+1.96*self.C_u_y_Diag, np.transpose(self.u_mean_y_pred_rom)-1.96*self.C_u_y_Diag,color = 'purple',alpha=0.1,label='$2sigma$ Posterior with ROM error')
             plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_pred_rom), linestyle='--', color = 'purple',lw = 1.5,label='Posterior mean ROM with rom error')
             
         print("proposed statROM on ROM prior posterior error:")
@@ -525,7 +525,7 @@ class StatROM_1D:
         fig = plt.figure(figsize=(8,4), dpi=100)
         plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_std - self.u_mean), linestyle='-', color = 'black',lw = 1.5,label='exact')
         plt.plot(self.RBmodel.coordinates, np.transpose(self.dr_mean), linestyle='-', color = 'purple',lw = 1.5,label='estimate')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.dr_mean)+1.96*np.sqrt(np.diagonal(self.dr_cov)), np.transpose(self.dr_mean)-1.96*np.sqrt(np.diagonal(self.dr_cov)),color = 'purple',alpha=0.1,label='$2\sigma$ estimate')
+        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.dr_mean)+1.96*np.sqrt(np.diagonal(self.dr_cov)), np.transpose(self.dr_mean)-1.96*np.sqrt(np.diagonal(self.dr_cov)),color = 'purple',alpha=0.1,label='$2sigma$ estimate')
         plt.grid()
         plt.legend()
         fig.savefig("./Results/ROMerror.pdf", bbox_inches='tight')

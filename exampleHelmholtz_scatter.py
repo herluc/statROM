@@ -9,6 +9,8 @@ __license__ = "MIT"
 import os
 import numpy as np
 import scipy
+from scipy.sparse import csr_matrix
+from scipy.sparse.linalg import spsolve
 import qmcpy as qp
 import matplotlib.pyplot as plt
 from RB_Solver_scatter import RBClass
@@ -29,6 +31,7 @@ plt.rcParams.update({
 plt.rc('text', usetex=True)
 plt.rc('text.latex',  preamble=r'\usepackage{amsmath}\usepackage[utf8]{inputenc}')
 
+import time
 
 
 class StatROM_2D:
@@ -39,12 +42,14 @@ class StatROM_2D:
         self.up = up
         self.RBmodel = RBClass(self.up)
         self.reset()
+        
 
 
     def reset(self):
         """Enables simple re-initialisation during convergence studies"""
         self.RBmodel.reset()
         self.L=self.up.m		        # size of basis
+        self.bases = []
         self.par1 = self.up.f           # frequency
 
 
@@ -69,12 +74,17 @@ class StatROM_2D:
         if adj == True:
             self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=np.zeros(np.shape(self.RBmodel.coordinates)[0]))
             P_error_est = self.RBmodel.getP(self.y_points_error_est)
+            self.P_error_est = P_error_est
             V_adj_list = []
             for i in range(np.shape(P_error_est)[0]):
-                V_adj_list.append(AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0])
+               # V_adj_list.append(AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0])
+                V_adj_list.append(AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],P_error_est[i],[s0],Nr,LinSysFac=LinSysFac)[0])
                 print("adjoint sample nr. "+str(i))
             #V_adj_list = [AORA(self.RBmodel.Msp.conj().T,self.RBmodel.Dsp.conj().T,self.RBmodel.KKsp.conj().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])]
         self.nAora = Nr
+        ident_coord = np.identity(len(self.RBmodel.coordinates_coarse))
+        self.errorEstPriorKernel = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=340/self.par1,sigf=1.0) +1e-12*ident_coord #l=0.012
+        end = time.time()
 
         return V_AORA,V_adj_list,Nr
 
@@ -85,6 +95,8 @@ class StatROM_2D:
         dim = np.shape(self.RBmodel.coordinates)[0]
         cov_re = cov(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)+np.identity(dim)*1e-6
         cov_im = cov(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)+np.identity(dim)*1e-6
+        self.cov_re = cov_re
+        self.cov_im = cov_im
         cov_block = np.block([
         [cov_re,               np.zeros((dim, dim))],
         [np.zeros((dim, dim)), cov_im               ]
@@ -93,6 +105,17 @@ class StatROM_2D:
         all_par_samples = g_all.gen_samples(n_samp)
         self.f_samples = all_par_samples[:,0:dim]
         self.f_samples_im = all_par_samples[:,dim:]
+
+        self.f_samples_combined = self.f_samples + 1j*self.f_samples_im
+        self.Cf_sampled = np.cov(np.array(self.f_samples_combined), rowvar=0, ddof=0)
+
+
+        f_centered = self.f_samples_combined.T
+        print(np.shape(f_centered))
+
+        self.Cf_sampled = f_centered @ f_centered.conj().T / (n_samp - 1)
+        print(np.shape(self.Cf_sampled))
+      #  quit()
 
         self.het_samples = np.random.normal(loc=0.0, scale=1e-16,size=n_samp)
 
@@ -128,6 +151,7 @@ class StatROM_2D:
     def computeROMbasisSample(self,sample,i):
         self.wrapper_AORA(rhs_sp=sample+1j*self.f_samples_im[i])
         self.saveBasis(self.V_AORA,i)
+        self.bases.append(np.copy(self.V_AORA))
 
 
     def loadBasis(self,i):
@@ -147,16 +171,32 @@ class StatROM_2D:
         u_rom_unified = []
         u_rom_real = []
         u_rom_imag = []
+        d_rom = []
         self.loadBasis(0)
         self.rom_mean = self.RBmodel.getPriorAORA(self.V_AORA_mean,[self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0]),self.het_samples[0]])[0]
+        
+        start = time.time()
         for i,sample in enumerate(self.f_samples):
-            self.loadBasis(i)
-            u_sc,_ = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]])
+           # self.loadBasis(i)
+
+           # u_sc,_ = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]])
+            u_sc,_ = self.RBmodel.getPriorAORA(self.bases[i],[self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]])
             u_rom.append(u_sc)
             u_rom_real.append(np.real(u_sc))
             u_rom_imag.append(np.imag(u_sc))
             u_rom_unified.append(np.concatenate([np.real(u_sc),np.imag(u_sc)]))
-
+            #print("ROM sample "+str(i)+" error est start")
+          #  dr = self.romErrorEstSampled([self.par1,sample+1j*self.f_samples_im[i],self.het_samples[i]],ur=u_sc,multiple_bases=True)
+          #  d_rom.append(dr)
+            print("ROM sample "+str(i)+" done")
+        end = time.time()
+        print("ROM loop through samples:")
+        print(end - start)
+        print("ROM mean time:")
+        print(np.mean(np.array(self.RBmodel.times_reducedorder)))
+       # self.dr_mean_real, self.dr_cov_real = self.errorGPnoisy(np.real(d_rom),self.y_points_error_est)
+       # self.dr_mean_imag, self.dr_cov_imag = self.errorGPnoisy(np.imag(d_rom),self.y_points_error_est)
+        
         self.u_mean_real = np.mean(np.array(u_rom_real),axis=0)
         self.u_mean_imag = np.mean(np.array(u_rom_imag),axis=0)
         self.u_mean = np.mean(np.array(u_rom),axis=0)
@@ -165,8 +205,12 @@ class StatROM_2D:
         C_u_real = np.cov(np.array(u_rom_real), rowvar=0, ddof=0)
         C_u_imag = np.cov(np.array(u_rom_imag), rowvar=0, ddof=0)
         
+        start = time.time()
         self.romErrorEst([self.par1,np.zeros(np.shape(self.RBmodel.coordinates)[0])],ur=self.u_mean,Cu=C_u_approx,Cu_real=C_u_real,Cu_imag=C_u_imag,multiple_bases=False)
-        
+        end = time.time()
+        print("error est time:")
+        print(end - start)
+        input("Press Enter to continue.")
         ident = np.identity(np.shape(C_u)[0])
         self.C_u = C_u + 9e-8*ident
         ident_small = np.identity(np.shape(C_u_real)[0])
@@ -214,6 +258,7 @@ class StatROM_2D:
        
         idx_total = np.unique(np.concatenate([idx_error_est,idx_boundary]))
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_total]
+        #self.P_error_est = self.RBmodel.getP(self.y_points_error_est)
    
         values_at_indices = [solution[x]+0.0 for x in idx]
 
@@ -245,7 +290,7 @@ class StatROM_2D:
             GP regression.
         """
 
-        P = self.RBmodel.getP(self.y_points_error_est)
+        P = self.P_error_est# self.RBmodel.getP(self.y_points_error_est)
         V_mean = self.V_AORA_mean
         
         _, A, _ = self.RBmodel.doFEMHelmholtz(par[0],par[1],assemble_only=True)
@@ -253,37 +298,129 @@ class StatROM_2D:
         ident = np.identity(np.shape(A_r)[0])
         VAr_inv = V_mean @ np.linalg.solve(A_r,ident)
         f = self.RBmodel.FFnp.copy()
-        A = A.todense()
+       # A = A.todense()
+        Cu = csr_matrix(Cu)
 
         if isinstance(ur,type(None)):
             ur = self.u_mean
         else: 
             ur=ur
 
+
         residual = f - A@(ur)
         dr=[]
         dr_var = []
-        Cf = kernels.matern52(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)
-        Cf = self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
+        dr_var_real = []
+        dr_var_imag = []
+      #  Cf = kernels.matern52(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)
+        start = time.time()
+        Cf = self.C_f+np.identity(np.shape(A)[0])*1e-10 # self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
         Cf = Cf+ 1j*Cf
+        self.Cf_computed = Cf
+      #  Cf = self.Cf_sampled
+        A_H = A.conj().T
+        #Cf_approx = A@Cu@(A.conj().T)
+        
+       # Cf_approx = A@Cu@(A_H)
+        Cf_approx = (A @ Cu) @ A_H
+        self.Cf_approx = Cf_approx
+        Cf_total = Cf + Cf_approx
+        end = time.time()
+        print("Cf approx time:")
+        print(end-start)
 
+
+        startdr = time.time()
         for i in range(np.shape(P)[0]):
             V = self.V_adj_list[i]
-            A_r_T = V.conj().T@A.conj().T@V
-            zr = np.linalg.solve(A_r_T,(V.conj().T)@P[i])
-            z_est = V@zr
-            dr_i = z_est.conj().T@np.array(residual)[0]
-            dr.append(dr_i)
-            Cf_approx = A@Cu@A.conj().T
-            Cdr = z_est.conj().T@Cf@z_est + z_est.conj().T@Cf_approx@z_est
 
+            #A_r_T = V.conj().T@(A.conj().T)@V
+            V_H = V.conj().T
+          #  A_r_T = V_H@(A_H)@V
+            A_V = A_H @ V  # results in n × r
+            A_r_T = V_H @ A_V  # r × r
+           # zr = np.linalg.solve(A_r_T,(V_H)@P[i])
+            zr = spsolve(A_r_T,(V_H)@P[i])
+            z_est = V@zr
+            z_H = z_est.conj().T
+            dr_i = (z_H)@np.array(residual)#[0]
+            dr.append(dr_i)
+            
+          #  Cdr = (z_H)@Cf@z_est + (z_H)@Cf_approx@z_est
+            Cdr = (z_H)@Cf_total@z_est 
             dr_var.append(Cdr)
 
+        enddr = time.time()
+        print("dr loop time:")
+        print(enddr-startdr)
+
+        start = time.time()
         if multiple_bases == False:
             self.dr_var = np.nan_to_num(np.array(dr_var))
-            self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
-            self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
+          #  self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
+          #  self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
+            self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0,0]))
+            self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0,0]))
+           # self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(dr_var_real[:,0]))
+           # self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.real(dr_var_imag[:,0]))
+        else:
+            return dr
+        end = time.time()
+        print("GP time:")
+        print(end-start)
+
+
+    def romErrorEstSampled(self,par,ur = None,multiple_bases = False):
+        """ Provides a cheap estimate for the ROM error
+            using evaluations of the adoint solution at
+            given points throughout the domain and a
+            GP regression.
+        """
+
+        P = self.RBmodel.getP(self.y_points_error_est)
+        V_state = self.V_AORA
         
+        _, A, _ = self.RBmodel.doFEMHelmholtz(par[0],par[1],assemble_only=True)
+        f_rhs = self.RBmodel.FFnp.copy()
+       # ai, aj, av = A.getValuesCSR()
+       # Asp = csr_matrix((av, aj, ai))
+       # A = Asp.todense()
+      #  Ar = self.RBmodel.getAr(V_state,A)
+        A_r = V_state.conj().T@A@V_state
+        if isinstance(ur,type(None)):
+            ur = self.u_mean
+        else: 
+            ur=ur
+        f = f_rhs
+
+
+        A_r = V_state.conj().T@A@V_state
+        ident = np.identity(np.shape(A_r)[0])
+        VAr_inv = V_state @ np.linalg.solve(A_r,ident)
+        f = self.RBmodel.FFnp.copy()
+        A = A.todense()
+
+        residual = f - A@ur
+        dr=[]
+       # dr_exact = []
+        for i in range(np.shape(P)[0]):
+            V = self.V_adj_list[i]
+            A_r_T = np.transpose(V)@np.transpose(A)@V
+            zr = np.linalg.solve(A_r_T,(V.T)@P[i])
+            z_est = V@zr
+          #  z_exact = np.linalg.solve(A.T,P[i])
+            dr_i = z_est.T@np.array(residual)[0]
+           # dr_i_exact = z_exact.T@np.array(residual)[0]
+            dr.append(dr_i)
+           # dr_exact.append(dr_i_exact)
+
+        self.dr_est = dr
+       # self.dr_ex  = dr_exact
+      #  reference = np.copy(self.dr_ex)
+        solution = self.dr_est
+      #  print(np.linalg.norm(reference-solution)/np.linalg.norm(reference))
+        if multiple_bases == False:
+            self.dr_mean, self.dr_cov = self.errorGP(dr,self.y_points_error_est)
         else:
             return dr
 
@@ -299,21 +436,77 @@ class StatROM_2D:
         y_points = np.array(y_points)
 
         # simple way to find suitable hyperparameters
-        l = 340/self.par1/3
-        sig = np.max(np.abs(dr))*3
-        noise = np.diag(dr_vari[:,0])
+        l = 340/self.par1#/2
+       # sig = np.max(np.abs(dr))*3#0.5#3
+    #    noise = np.diag(dr_vari[:,0])#*0
+        noise = np.diag(dr_vari[:])#*0
+        print("max noise:")
+        print(np.max(np.abs(noise)))
+        sig = np.sqrt(np.max(np.abs(noise)))
+        #noise = np.max(np.abs(dr))/20
         # training noise comes pre-computed from the adjoint estimator
+        start = time.time()
+       # prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-12*ident_coord #l=0.012
+        prior_cov = sig**2 * self.errorEstPriorKernel
+        end = time.time()
+        print("Kernel time:")
+        print(end-start)
+        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)#+noise**2#+1e-9*ident_y
+
+        data_kernel = 0.5*(data_kernel+data_kernel.T)
+        mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
+
+     #   solved = scipy.linalg.solve(data_kernel, mixed_kernel).T
+
+        L = scipy.linalg.cholesky(data_kernel, lower=True)
+
+        # Solve
+        tmp = scipy.linalg.solve_triangular(L, mixed_kernel, lower=True)
+        solved = scipy.linalg.solve_triangular(L.T, tmp, lower=False).T
+
+        post_mean = solved @ dr
+
+     #  post_cov = prior_cov - (solved@mixed_kernel)
+        diag_post_cov = np.diag(prior_cov) - np.sum(solved * mixed_kernel.T, axis=1)
+        post_cov = np.diag(diag_post_cov)
+
+
+        return post_mean,post_cov
+    
+
+    def errorGPnoisy(self,dr,y_points):
+        """ Computes the GP regression for the ROM error
+            given the approximative adjoint solution for
+            the error at given points.
+        """
+        n_obs = np.shape(dr)[0]
+        dr_mean = np.mean(np.real(dr),axis=0)
+        dr_sum = np.sum(np.real(dr),axis=0)
+
+        ident_coord = np.identity(len(self.RBmodel.coordinates_coarse))
+        y_points = np.array(y_points)
+
+        dr_cov = np.cov(np.real(dr), rowvar=0, ddof=0)
+        ident_coord = np.identity(len(self.RBmodel.coordinates))
+        y_points = np.array(y_points)
+
+        # simple way to find suitable hyperparameters
+        l = 340/self.par1/3
+        sig = np.max(np.abs(dr))*0.5#3
+       # noise = np.diag(dr_vari[:,0])*0
+        #noise = np.max(np.abs(dr))/20
+        
         prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-10*ident_coord #l=0.012
-        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+noise#+1e-9*ident_y
+        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)*n_obs+dr_cov#+1e-9*ident_y
         data_kernel = 0.5*(data_kernel+data_kernel.T)
         mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
 
         solved = scipy.linalg.solve(data_kernel, mixed_kernel).T
-        post_mean = solved @ dr
-        post_cov = prior_cov - (solved@mixed_kernel)
+        post_mean = solved @ dr_sum
+        post_cov = prior_cov - n_obs*(solved@mixed_kernel)
+
 
         return post_mean,post_cov
-    
 
 
     def getFullOrderPosterior(self):
@@ -374,15 +567,31 @@ class StatROM_2D:
         u = []
         u_unified = []
         u_data = []
+        start = time.time()
+        times_fullorder = []
         for j,samp in enumerate(self.f_samples):
-            self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp+1j*self.f_samples_im[j])
+            self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp+1j*self.f_samples_im[j],assemble_only=True)
+            startSolve = time.time()
             _, _, uj  = self.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
+            endSolve= time.time()
             uD = uj - self.RBmodel.ui.x.array
+            print("FEM single solve:")
+            duration = endSolve - startSolve
+            times_fullorder.append(duration)
+            print(duration)
             u_data.append(uD)
             u.append(uj)
             u_unified.append(np.concatenate([np.real(uj),np.imag(uj)]))
+            print("FEM sample "+str(j)+" done")
+        end = time.time()
+        print("FOM loop through samples:")
+        print(end - start)
+        print("FEM mean time:")
+        print(np.mean(np.array(times_fullorder)))
+        #input("Press Enter to continue.")
         u_mean_std = np.mean(np.array(u),axis=0)  
         self.u_mean_data = np.mean(np.array(u_data),axis=0)
+        self.C_f = self.RBmodel.get_C_f()
         C_u_std = np.cov(u, rowvar=0, ddof=0)
         self.C_u_std_real = np.cov(np.real(u), rowvar=0, ddof=0)
         self.C_u_std_imag = np.cov(np.imag(u), rowvar=0, ddof=0)
@@ -404,7 +613,7 @@ class StatROM_2D:
 
 
 
-    def computeErrorNorm(self,solution,reference):
+    def computeErrorNorm(self,solution,reference,fem_compare=False):
 
         bar_p_sq = 0
         for p in solution:
@@ -415,7 +624,10 @@ class StatROM_2D:
         degree_raise = 4
         uh = Function(self.RBmodel.V_coarse)
         uh.x.array[:] = solution
-        u_ex = Function(self.RBmodel.V_ground_truth)
+        if fem_compare == True:
+            u_ex = Function(self.RBmodel.V_coarse)
+        else:
+            u_ex = Function(self.RBmodel.V_ground_truth)
         u_ex.x.array[:] = reference
         # Create higher order function space
         degree = uh.function_space.ufl_element().degree()
@@ -561,6 +773,13 @@ class StatROM_2D:
             ut.x.array[:] = np.sqrt(np.diagonal(self.dr_cov_real + 1j*self.dr_cov_imag))
             xdmf.write_function(ut)
 
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_variance_estimated_noise.xdmf", "w") as xdmf:
+            xdmf.write_mesh(self.RBmodel.msh)
+            ut = dolfinx.fem.Function(self.RBmodel.V)
+            ut.x.array[:] = np.sqrt(np.diagonal(self.dr_var))
+            xdmf.write_function(ut)
+
+
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/ROM_error_mean_estimated.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.RBmodel.msh)
             ut = dolfinx.fem.Function(self.RBmodel.V)
@@ -634,18 +853,33 @@ class StatROM_2D:
             ut = dolfinx.fem.Function(self.RBmodel.V)
             ut.x.array[:] = self.C_u_y_Diag
             xdmf.write_function(ut)
+
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorFEMCorrROMmeanDiff.xdmf", "w") as xdmf:
+            xdmf.write_mesh(self.RBmodel.msh)
+            ut = dolfinx.fem.Function(self.RBmodel.V)
+            ut.x.array[:] = u_fem-u_rom_adv
+            xdmf.write_function(ut)
+
+        with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/posteriorFEMstdROMmeanDiff.xdmf", "w") as xdmf:
+            xdmf.write_mesh(self.RBmodel.msh)
+            ut = dolfinx.fem.Function(self.RBmodel.V)
+            ut.x.array[:] = u_fem-u_rom_easy
+            xdmf.write_function(ut)
     
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorAdv.xdmf", "w") as xdmf:
             print("proposed statROM on ROM prior posterior error:")
             print(self.computeErrorNorm(u_rom_adv,self.data_solution))
+            print(self.computeErrorNorm(u_rom_adv,u_fem,fem_compare=True))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorEasy.xdmf", "w") as xdmf:
             print("classical statFEM on ROM prior posterior error:")
             print(self.computeErrorNorm(u_rom_easy,self.data_solution))
+            print(self.computeErrorNorm(u_rom_easy,u_fem,fem_compare=True))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorFem.xdmf", "w") as xdmf:
             print("classical statFEM on FEM prior posterior error (reference):")
             print(self.computeErrorNorm(u_fem,self.data_solution))
+            print(self.computeErrorNorm(u_fem,u_fem,fem_compare=True))
 
 
 

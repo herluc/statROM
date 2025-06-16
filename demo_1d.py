@@ -16,7 +16,7 @@ class UserParameters:
         pass
     f = 460#Hz      # frequency
     s = 100#Hz      # AORA expansion frequency
-    m = 5           # number of matched moments in AORA
+    m = 15          # number of matched moments in AORA
 
     n = 100         # number of degrees of freedom
     n_fine = 1000   # number of degrees of freedom in the data generating process

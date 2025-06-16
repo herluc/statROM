@@ -14,19 +14,19 @@ from exampleHelmholtz_scatter import StatROM_2D
 class UserParameters:
     def __init__(self):
         pass
-    f = 360#Hz      # frequency
+    f = 400#Hz      # frequency
     s = 250#Hz      # AORA expansion frequency
-    m = 12          # number of matched moments in AORA
+    m = 12#8#12          # number of matched moments in AORA
 
     #               # the mesh for the model and a finer one for data are hardcoded with gmsh.
     #               #
     n_qmc = 256     # number of QMC sample points. Only powers of two are permitted
 
-    ns = 5         # number of sensors
+    ns = 5        # number of sensors
     no = 20        # number of observations per sensor
     sig_o = 5e-4#Pa # observation noise
 
-    n_est = 200      # number of error estimator training points
+    n_est = 200#200      # number of error estimator training points
 
 
 if __name__ == '__main__':
@@ -36,6 +36,7 @@ if __name__ == '__main__':
     ### Generate data from fine mesh:
     funcs.switchMesh_self("ground_truth")
     funcs.generateParameterSamples(up.n_qmc,save=False,load=True)
+    #funcs.generateParameterSamples(up.n_qmc,save=True,load=False)
     funcs.getFullOrderPrior() # solve for "ground truth"
     funcs.get_noisy_data_from_solution(0,np.abs(funcs.u_mean_std)) # extract noisy data at sensors
     ####
