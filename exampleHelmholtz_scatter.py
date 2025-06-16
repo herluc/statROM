@@ -190,9 +190,9 @@ class StatROM_2D:
           #  d_rom.append(dr)
             print("ROM sample "+str(i)+" done")
         end = time.time()
-        print("ROM loop through samples:")
+        print("ROM loop through all samples time:")
         print(end - start)
-        print("ROM mean time:")
+        print("ROM mean sample solve time:")
         print(np.mean(np.array(self.RBmodel.times_reducedorder)))
        # self.dr_mean_real, self.dr_cov_real = self.errorGPnoisy(np.real(d_rom),self.y_points_error_est)
        # self.dr_mean_imag, self.dr_cov_imag = self.errorGPnoisy(np.imag(d_rom),self.y_points_error_est)
@@ -258,8 +258,7 @@ class StatROM_2D:
        
         idx_total = np.unique(np.concatenate([idx_error_est,idx_boundary]))
         self.y_points_error_est = [self.RBmodel.coordinates_coarse.tolist()[i] for i in idx_total]
-        #self.P_error_est = self.RBmodel.getP(self.y_points_error_est)
-   
+
         values_at_indices = [solution[x]+0.0 for x in idx]
 
         n_obs = self.up.no
@@ -298,7 +297,6 @@ class StatROM_2D:
         ident = np.identity(np.shape(A_r)[0])
         VAr_inv = V_mean @ np.linalg.solve(A_r,ident)
         f = self.RBmodel.FFnp.copy()
-       # A = A.todense()
         Cu = csr_matrix(Cu)
 
         if isinstance(ur,type(None)):
@@ -312,62 +310,35 @@ class StatROM_2D:
         dr_var = []
         dr_var_real = []
         dr_var_imag = []
-      #  Cf = kernels.matern52(self.RBmodel.coordinates,self.RBmodel.coordinates,lf=0.6,sigf=0.8)
-        start = time.time()
-        Cf = self.C_f+np.identity(np.shape(A)[0])*1e-10 # self.RBmodel.get_C_f() +np.identity(np.shape(A)[0])*1e-10
+        Cf = self.C_f+np.identity(np.shape(A)[0])*1e-10 
         Cf = Cf+ 1j*Cf
         self.Cf_computed = Cf
-      #  Cf = self.Cf_sampled
         A_H = A.conj().T
-        #Cf_approx = A@Cu@(A.conj().T)
-        
-       # Cf_approx = A@Cu@(A_H)
+
         Cf_approx = (A @ Cu) @ A_H
         self.Cf_approx = Cf_approx
         Cf_total = Cf + Cf_approx
-        end = time.time()
-        print("Cf approx time:")
-        print(end-start)
 
-
-        startdr = time.time()
         for i in range(np.shape(P)[0]):
             V = self.V_adj_list[i]
-
-            #A_r_T = V.conj().T@(A.conj().T)@V
             V_H = V.conj().T
-          #  A_r_T = V_H@(A_H)@V
             A_V = A_H @ V  # results in n × r
             A_r_T = V_H @ A_V  # r × r
-           # zr = np.linalg.solve(A_r_T,(V_H)@P[i])
             zr = spsolve(A_r_T,(V_H)@P[i])
             z_est = V@zr
             z_H = z_est.conj().T
             dr_i = (z_H)@np.array(residual)#[0]
             dr.append(dr_i)
-            
-          #  Cdr = (z_H)@Cf@z_est + (z_H)@Cf_approx@z_est
+
             Cdr = (z_H)@Cf_total@z_est 
             dr_var.append(Cdr)
 
-        enddr = time.time()
-        print("dr loop time:")
-        print(enddr-startdr)
-
-        start = time.time()
         if multiple_bases == False:
             self.dr_var = np.nan_to_num(np.array(dr_var))
-          #  self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0]))
-          #  self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0]))
             self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(self.dr_var[:,0,0]))
             self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.imag(self.dr_var[:,0,0]))
-           # self.dr_mean_real, self.dr_cov_real = self.errorGP(np.nan_to_num(np.real(dr)),self.y_points_error_est,dr_vari=np.real(dr_var_real[:,0]))
-           # self.dr_mean_imag, self.dr_cov_imag = self.errorGP(np.nan_to_num(np.imag(dr)),self.y_points_error_est,dr_vari=np.real(dr_var_imag[:,0]))
         else:
             return dr
-        end = time.time()
-        print("GP time:")
-        print(end-start)
 
 
     def romErrorEstSampled(self,par,ur = None,multiple_bases = False):
@@ -382,17 +353,12 @@ class StatROM_2D:
         
         _, A, _ = self.RBmodel.doFEMHelmholtz(par[0],par[1],assemble_only=True)
         f_rhs = self.RBmodel.FFnp.copy()
-       # ai, aj, av = A.getValuesCSR()
-       # Asp = csr_matrix((av, aj, ai))
-       # A = Asp.todense()
-      #  Ar = self.RBmodel.getAr(V_state,A)
         A_r = V_state.conj().T@A@V_state
         if isinstance(ur,type(None)):
             ur = self.u_mean
         else: 
             ur=ur
         f = f_rhs
-
 
         A_r = V_state.conj().T@A@V_state
         ident = np.identity(np.shape(A_r)[0])
@@ -418,7 +384,6 @@ class StatROM_2D:
        # self.dr_ex  = dr_exact
       #  reference = np.copy(self.dr_ex)
         solution = self.dr_est
-      #  print(np.linalg.norm(reference-solution)/np.linalg.norm(reference))
         if multiple_bases == False:
             self.dr_mean, self.dr_cov = self.errorGP(dr,self.y_points_error_est)
         else:
@@ -437,26 +402,17 @@ class StatROM_2D:
 
         # simple way to find suitable hyperparameters
         l = 340/self.par1#/2
-       # sig = np.max(np.abs(dr))*3#0.5#3
-    #    noise = np.diag(dr_vari[:,0])#*0
         noise = np.diag(dr_vari[:])#*0
         print("max noise:")
         print(np.max(np.abs(noise)))
-        sig = np.sqrt(np.max(np.abs(noise)))
-        #noise = np.max(np.abs(dr))/20
-        # training noise comes pre-computed from the adjoint estimator
-        start = time.time()
-       # prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-12*ident_coord #l=0.012
+        sig = np.sqrt(np.max(np.abs(noise)))# training noise comes pre-computed from the adjoint estimator
         prior_cov = sig**2 * self.errorEstPriorKernel
         end = time.time()
-        print("Kernel time:")
-        print(end-start)
+
         data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)#+noise**2#+1e-9*ident_y
 
         data_kernel = 0.5*(data_kernel+data_kernel.T)
         mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates_coarse,lf=l,sigf=sig)
-
-     #   solved = scipy.linalg.solve(data_kernel, mixed_kernel).T
 
         L = scipy.linalg.cholesky(data_kernel, lower=True)
 
@@ -467,7 +423,7 @@ class StatROM_2D:
         post_mean = solved @ dr
 
      #  post_cov = prior_cov - (solved@mixed_kernel)
-        diag_post_cov = np.diag(prior_cov) - np.sum(solved * mixed_kernel.T, axis=1)
+        diag_post_cov = np.diag(prior_cov) - np.sum(solved * mixed_kernel.T, axis=1) # we only need the diagonal, this is faster
         post_cov = np.diag(diag_post_cov)
 
 
@@ -492,9 +448,7 @@ class StatROM_2D:
 
         # simple way to find suitable hyperparameters
         l = 340/self.par1/3
-        sig = np.max(np.abs(dr))*0.5#3
-       # noise = np.diag(dr_vari[:,0])*0
-        #noise = np.max(np.abs(dr))/20
+        sig = np.max(np.abs(dr))*0.5
         
         prior_cov = kernels.matern52(self.RBmodel.coordinates_coarse,self.RBmodel.coordinates_coarse,lf=l,sigf=sig) +1e-10*ident_coord #l=0.012
         data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)*n_obs+dr_cov#+1e-9*ident_y
@@ -504,7 +458,6 @@ class StatROM_2D:
         solved = scipy.linalg.solve(data_kernel, mixed_kernel).T
         post_mean = solved @ dr_sum
         post_cov = prior_cov - n_obs*(solved@mixed_kernel)
-
 
         return post_mean,post_cov
 
@@ -575,18 +528,16 @@ class StatROM_2D:
             _, _, uj  = self.RBmodel.solveFEM(rhsPar=samp+1j*self.f_samples_im[j])
             endSolve= time.time()
             uD = uj - self.RBmodel.ui.x.array
-            print("FEM single solve:")
             duration = endSolve - startSolve
             times_fullorder.append(duration)
-            print(duration)
             u_data.append(uD)
             u.append(uj)
             u_unified.append(np.concatenate([np.real(uj),np.imag(uj)]))
             print("FEM sample "+str(j)+" done")
         end = time.time()
-        print("FOM loop through samples:")
+        print("FOM loop through all samples time:")
         print(end - start)
-        print("FEM mean time:")
+        print("FEM mean sample solve time:")
         print(np.mean(np.array(times_fullorder)))
         #input("Press Enter to continue.")
         u_mean_std = np.mean(np.array(u),axis=0)  

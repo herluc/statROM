@@ -3,7 +3,7 @@ statROM Helmholtz 2D scattering example
 """
 
 __author__ = "Lucas Hermann"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __license__ = "MIT"
 
 
@@ -22,11 +22,11 @@ class UserParameters:
     #               #
     n_qmc = 256     # number of QMC sample points. Only powers of two are permitted
 
-    ns = 5        # number of sensors
-    no = 20        # number of observations per sensor
+    ns = 5          # number of sensors
+    no = 20         # number of observations per sensor
     sig_o = 5e-4#Pa # observation noise
 
-    n_est = 200#200      # number of error estimator training points
+    n_est = 200     # number of error estimator training points
 
 
 if __name__ == '__main__':

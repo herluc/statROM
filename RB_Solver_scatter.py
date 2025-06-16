@@ -177,13 +177,8 @@ class RBClass:
         
 
     def solveFEM(self, rhsPar):
-     #   uh = self.problem.solve()
-     #   uh_np = uh.vector.getArray()
-     #   uh_np = np.copy(uh_np)
-     #   U = uh.vector
         p_full = spsolve(self.A,self.FFnp)
         uh_np = p_full
-        #return uh, U, uh_np
         return None, None, uh_np
     
 
@@ -259,10 +254,8 @@ class RBClass:
         p_rom = spsolve(Asp_rom,Fr)
         p_rom_re = V@p_rom
         end = time.time()
-        print("ROM single solve:")
         duration = end - start
         self.times_reducedorder.append(duration)
-        print(duration)
         self.u_mean_r = p_rom
         u_mean = p_rom_re
 
