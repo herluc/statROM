@@ -50,7 +50,7 @@ class RBClass:
                  Lx=L,
                  Ly=H,
                  lc=lc,
-                 refine = 0.04)#0.04
+                 refine = 0.04)
         
         self.msh_ground_truth, self.cell_markers_ground_truth, self.facet_markers_ground_truth  = generate_mesh_with_obstacle(
                  Lx=L,
