@@ -52,6 +52,8 @@ classical statFEM on FEM prior posterior error (reference):
 (0.007312335634658208+0j)
 ```
 which are the error norms of the proposed method, the classical statFEM on a ROM prior and the statFEM on FEM baseline.
+Notice that the output will vary: The forcing, the parameter sample and also the data generation are stochastic. Therefore, there will be randomness also in the posterior solution. 
+
 
 In the Results folder, in the 1D case an overview plot with priors, posteriors and data will be saved. The desired plots can easily be chosen in the demo script. In the 2D example, a number of .xdmf files, which can be viewd with ParaView, will be saved. The most interesting ones are:
 - ROM_error_mean_estimated.xdmf (adjoint GP estimate of the ROM error)
