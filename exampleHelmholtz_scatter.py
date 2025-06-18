@@ -210,7 +210,6 @@ class StatROM_2D:
         end = time.time()
         print("error est time:")
         print(end - start)
-        input("Press Enter to continue.")
         ident = np.identity(np.shape(C_u)[0])
         self.C_u = C_u + 9e-8*ident
         ident_small = np.identity(np.shape(C_u_real)[0])
