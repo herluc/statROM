@@ -223,6 +223,7 @@ class StatROM_1D:
             given the approximative adjoint solution for
             the error at given points.
         """
+        print("errorgp")
         with open('./Results/dr.npy', 'wb') as fileArray:
             np.save(fileArray,dr)
         ident_coord = np.identity(len(self.RBmodel.coordinates))
@@ -247,9 +248,9 @@ class StatROM_1D:
         size=5)
         fig = plt.figure(figsize=(6, 4))
         for i in range(5):
-            plt.plot(self.RBmodel.coordinates, ys_post[i], linestyle='--')
-        plt.plot(self.RBmodel.coordinates, post_mean, linestyle='-')
-        plt.scatter(y_points,dr)
+            plt.plot(self.RBmodel.coordinates, np.real(ys_post[i]), linestyle='--')
+        plt.plot(self.RBmodel.coordinates, np.real(post_mean), linestyle='-')
+        plt.scatter(y_points,np.real(dr))
         plt.xlabel('$x$', fontsize=13)
         plt.ylabel('$y = f(x)$', fontsize=13)
         plt.title((
@@ -257,8 +258,8 @@ class StatROM_1D:
         fig.savefig("Results/error_GP.pdf", bbox_inches='tight')
 
         with open('Results/dr_cov.npy', 'wb') as fileArray:
-            np.save(fileArray,post_cov)
-
+            np.save(fileArray,np.real(post_cov))
+        print("errorgp")
         return post_mean,post_cov
     
 
@@ -481,36 +482,34 @@ class StatROM_1D:
 
     def plotPriorPosteriorComparison(self,prior=True,posterior=True):
         fig = plt.figure(figsize=(6,3), dpi=300)
-        
         if prior == True:
-            plt.plot(self.RBmodel.coordinates, self.u_mean_std, linestyle='-', color = 'red',lw = 1.0, label='Prior FEM')
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_std)+1.96*self.C_u_stdDiag, np.transpose(self.u_mean_std)-1.96*self.C_u_stdDiag,color = 'red',alpha=0.1)
+            plt.plot(self.RBmodel.coordinates, np.real(self.u_mean_std), linestyle='-', color = 'red',lw = 1.0, label='Prior FEM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.u_mean_std))+1.96*np.real(self.C_u_stdDiag), np.real(np.transpose(self.u_mean_std))-1.96*np.real(self.C_u_stdDiag),color = 'red',alpha=0.1)
 
-            plt.plot(self.RBmodel.coordinates, self.u_mean, linestyle='-', color = 'green',lw = 1.0, label='Prior ROM')
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean)+1.96*self.C_uDiag, np.transpose(self.u_mean)-1.96*self.C_uDiag,color = 'green',alpha=0.1)
+            plt.plot(self.RBmodel.coordinates, np.real(self.u_mean), linestyle='-', color = 'green',lw = 1.0, label='Prior ROM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.u_mean))+1.96*np.real(self.C_uDiag), np.real(np.transpose(self.u_mean))-1.96*np.real(self.C_uDiag),color = 'green',alpha=0.1)
         if posterior == True:
-            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_std), linestyle='-', color = 'blue',lw = 1.5,label='Posterior mean FEM')
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_std)+1.96*self.C_u_y_std_Diag, np.transpose(self.u_mean_y_std)-1.96*self.C_u_y_std_Diag,color = 'blue',alpha=0.1)
+            plt.plot(np.real(self.RBmodel.coordinates), np.real(np.transpose(self.u_mean_y_std)), linestyle='-', color = 'blue',lw = 1.5,label='Posterior mean FEM')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.u_mean_y_std))+1.96*np.real(self.C_u_y_std_Diag), np.real(np.transpose(self.u_mean_y_std))-1.96*np.real(self.C_u_y_std_Diag),color = 'blue',alpha=0.1)
 
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_easy)+1.96*self.C_u_y_easy_Diag, np.transpose(self.u_mean_y_easy)-1.96*self.C_u_y_easy_Diag,color = 'goldenrod',alpha=0.1,label='$2sigma$ Posterior w/o ROM error')
-            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_easy), linestyle='-', color = 'goldenrod',lw = 1.5,label='Posterior mean ROM w/o rom error')
-            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.u_mean_y_pred_rom)+1.96*self.C_u_y_Diag, np.transpose(self.u_mean_y_pred_rom)-1.96*self.C_u_y_Diag,color = 'purple',alpha=0.1,label='$2sigma$ Posterior with ROM error')
-            plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_y_pred_rom), linestyle='--', color = 'purple',lw = 1.5,label='Posterior mean ROM with rom error')
-            
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.u_mean_y_easy))+1.96*np.real(self.C_u_y_easy_Diag), np.real(np.transpose(self.u_mean_y_easy))-1.96*np.real(self.C_u_y_easy_Diag),color = 'goldenrod',alpha=0.1,label='$2sigma$ Posterior w/o ROM error')
+            plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.u_mean_y_easy)), linestyle='-', color = 'goldenrod',lw = 1.5,label='Posterior mean ROM w/o rom error')
+            plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.u_mean_y_pred_rom))+1.96*np.real(self.C_u_y_Diag), np.real(np.transpose(self.u_mean_y_pred_rom))-1.96*np.real(self.C_u_y_Diag),color = 'purple',alpha=0.1,label='$2sigma$ Posterior with ROM error')
+            plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.u_mean_y_pred_rom)), linestyle='--', color = 'purple',lw = 1.5,label='Posterior mean ROM with rom error')
         print("proposed statROM on ROM prior posterior error:")
         norm,_ = self.computeErrorNorm(self.u_mean_y_pred_rom,self.true_process)
         print(norm)
-        print("classical statFEM on ROM prior posterior error:")
+        print("standard statFEM on ROM prior posterior error:")
         norm,_ = self.computeErrorNorm(self.u_mean_y_easy,self.true_process)
         print(norm)
-        print("classical statFEM on FEM prior posterior error (reference):")
+        print("standard statFEM on FEM prior posterior error (reference):")
         norm,_ = self.computeErrorNorm(self.u_mean_y_std,self.true_process)
         print(norm)
 
-        plt.plot(self.RBmodel.coordinates_ground_truth, np.transpose(self.true_process), linestyle='--', color = 'blue',lw = 1.0,label=r'ground truth $\bar{\bm{u}}_\mathrm{ref}$')
+        plt.plot(np.real(self.RBmodel.coordinates_ground_truth), np.real(np.transpose(self.true_process)), linestyle='--', color = 'blue',lw = 1.0,label=r'ground truth $\bar{\bm{u}}_\mathrm{ref}$')
 
         for obs in self.y_values_list:
-            plt.scatter(self.y_points, obs,s=5, color = 'red',alpha=0.6)
+            plt.scatter(self.y_points, np.real(obs),s=5, color = 'red',alpha=0.6)
         plt.ylabel("$pressure [Pa]$")
         plt.xlabel("$x$")
 
@@ -518,19 +517,18 @@ class StatROM_1D:
         plt.legend()
         fig.savefig("./Results/End_result_statFEM.pdf", bbox_inches='tight')
         plt.close(fig)		
+        
 
 
 
     def plotRomError(self):
         fig = plt.figure(figsize=(8,4), dpi=100)
-        plt.plot(self.RBmodel.coordinates, np.transpose(self.u_mean_std - self.u_mean), linestyle='-', color = 'black',lw = 1.5,label='exact')
-        plt.plot(self.RBmodel.coordinates, np.transpose(self.dr_mean), linestyle='-', color = 'purple',lw = 1.5,label='estimate')
-        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.transpose(self.dr_mean)+1.96*np.sqrt(np.diagonal(self.dr_cov)), np.transpose(self.dr_mean)-1.96*np.sqrt(np.diagonal(self.dr_cov)),color = 'purple',alpha=0.1,label='$2sigma$ estimate')
+        plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.u_mean_std - self.u_mean)), linestyle='-', color = 'black',lw = 1.5,label='exact')
+        plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.dr_mean)), linestyle='-', color = 'purple',lw = 1.5,label='estimate')
+        plt.fill_between(np.transpose(self.RBmodel.coordinates)[0], np.real(np.transpose(self.dr_mean))+1.96*np.sqrt(np.diagonal(self.dr_cov)), np.real(np.transpose(self.dr_mean))-1.96*np.sqrt(np.diagonal(self.dr_cov)),color = 'purple',alpha=0.1,label='$2sigma$ estimate')
         plt.grid()
         plt.legend()
         fig.savefig("./Results/ROMerror.pdf", bbox_inches='tight')
- 
-
 
     
 
