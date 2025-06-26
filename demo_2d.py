@@ -35,7 +35,7 @@ if __name__ == '__main__':
     
     ### Generate data from fine mesh:
     funcs.switchMesh_self("ground_truth")
-    funcs.generateParameterSamples(up.n_qmc,save=False,load=False)
+    funcs.generateParameterSamples(up.n_qmc,save=False,load=False, seed=8) # seed = None for a new sample at each new run
     #funcs.generateParameterSamples(up.n_qmc,save=True,load=False)
     funcs.getFullOrderPrior() # solve for "ground truth"
     funcs.get_noisy_data_from_solution(0,np.abs(funcs.u_mean_std)) # extract noisy data at sensors
@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     funcs.switchMesh_self("coarse")
 
-    funcs.generateParameterSamples(up.n_qmc,load = False) # get new parameter sample
+    funcs.generateParameterSamples(up.n_qmc,load = False, seed=9) # get new parameter sample, seed = None for a new sample at each new run
 
     # Full order reference:
     funcs.getFullOrderPrior()

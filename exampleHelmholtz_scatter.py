@@ -89,7 +89,7 @@ class StatROM_2D:
         return V_AORA,V_adj_list,Nr
 
 
-    def generateParameterSamples(self,n_samp,load=False,save=False):
+    def generateParameterSamples(self,n_samp,load=False,save=False,seed=None):
         """ sample the parameter space using QMC """
         cov = kernels.matern52
         dim = np.shape(self.RBmodel.coordinates)[0]
@@ -101,7 +101,10 @@ class StatROM_2D:
         [cov_re,               np.zeros((dim, dim))],
         [np.zeros((dim, dim)), cov_im               ]
         ])
-        g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=2*dim),mean=np.zeros(2*dim),covariance=cov_block)
+        if seed == None:
+            g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=2*dim),mean=np.zeros(2*dim),covariance=cov_block)
+        else:
+            g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=2*dim,seed=seed),mean=np.zeros(2*dim),covariance=cov_block)
         all_par_samples = g_all.gen_samples(n_samp)
         self.f_samples = all_par_samples[:,0:dim]
         self.f_samples_im = all_par_samples[:,dim:]
@@ -481,14 +484,14 @@ class StatROM_2D:
         """ compute the statFEM posterior in the classical way.
             The ROM prior is used but no correction terms.
         """
-        print("Classical ROM posterior START")
+        print("Standard ROM posterior START")
         (u_mean_y_easy_real, C_u_y_easy_real, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_real,np.real(self.u_mean),self.C_u_real)
         (u_mean_y_easy_imag, C_u_y_easy_imag, postGP) = self.RBmodel.computePosteriorMultipleY(self.y_points,self.y_values_list_imag,np.imag(self.u_mean),self.C_u_imag)
         self.C_u_y_easy_Diag_real = np.sqrt(np.diagonal(C_u_y_easy_real))
         self.C_u_y_easy_Diag_imag = np.sqrt(np.diagonal(C_u_y_easy_imag))
         self.C_u_y_easy_Diag = self.C_u_y_easy_Diag_real + 1j*self.C_u_y_easy_Diag_imag
         self.d_ROM = np.copy(np.diag(self.RBmodel.C_d_total))
-        print("Classical ROM posterior FINISH")
+        print("Standard ROM posterior FINISH")
         self.u_mean_y_easy, self.C_u_y_easy = u_mean_y_easy_real+1j*u_mean_y_easy_imag, C_u_y_easy_real+1j*C_u_y_easy_imag
         return self.u_mean_y_easy, self.C_u_y_easy
 
@@ -822,12 +825,12 @@ class StatROM_2D:
             print(self.computeErrorNorm(u_rom_adv,u_fem,fem_compare=True))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorEasy.xdmf", "w") as xdmf:
-            print("classical statFEM on ROM prior posterior error:")
+            print("standard statFEM on ROM prior posterior error:")
             print(self.computeErrorNorm(u_rom_easy,self.data_solution))
             print(self.computeErrorNorm(u_rom_easy,u_fem,fem_compare=True))
 
         with dolfinx.io.XDMFFile(MPI.COMM_WORLD, "./Results/postErrorFem.xdmf", "w") as xdmf:
-            print("classical statFEM on FEM prior posterior error (reference):")
+            print("standard statFEM on FEM prior posterior error (reference):")
             print(self.computeErrorNorm(u_fem,self.data_solution))
             print(self.computeErrorNorm(u_fem,u_fem,fem_compare=True))
 
