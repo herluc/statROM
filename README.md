@@ -55,12 +55,14 @@ which are the error norms of the proposed method, the classical statFEM on a ROM
 Notice that the output will vary: The forcing, the parameter sample and also the data generation are stochastic. Therefore, there will be randomness also in the posterior solution. 
 
 
-In the Results folder, in the 1D case an overview plot with priors, posteriors and data will be saved. The desired plots can easily be chosen in the demo script. In the 2D example, a number of .xdmf files, which can be viewd with ParaView, will be saved. The most interesting ones are:
+In the Results folder, in the 1D case an overview plot with priors, posteriors and data will be saved. The desired plots can easily be chosen in the demo script. In the 2D example, a number of .xdmf files, which can be viewed with ParaView, will be saved. The most interesting ones are:
 - ROM_error_mean_estimated.xdmf (adjoint GP estimate of the ROM error)
 - ROM_error_mean_exact.xdmf (exact ROM error as a reference)
 - posteriorFEM_mean.xdmf (Full order reference posterior mean)
 - posteriorROM_mean.xdmf (Classical approach posterior mean)
 - posteriorCorrectedROM_mean.xdmf (Proposed approach posterior mean)
+
+Please notice that the plots for the parameter studies (Fig. 4-6 and 9) are not created directly by running the example files. These were made by running the code multiple times, compiling the results and constructing the plots individally.
 
 ## Support
 
