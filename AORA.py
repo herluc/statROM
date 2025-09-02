@@ -1,3 +1,19 @@
+"""
+###
+# python adaptation of the MATLAB code by M. Bollhöfer, TU Braunschweig
+###
+
+This file implements the AORA procedure for moment matching reduced order modeling. 
+The method relies on a modified Gram-Schmidt procedure.
+The AORA function takes as arguments the system matrices for the FEM system.
+Optionally, the LU decomposition can be reused to improve performance.
+
+The AORA function returns, among others, the projection matrix V whis is used
+to reduce the order of the FE system of equations.
+
+"""
+
+
 import numpy as np
 import scipy as sp
 import scipy.linalg
@@ -5,12 +21,13 @@ from scipy.sparse import csc_matrix, linalg as sla
 from scipy.sparse.linalg import spsolve
 from assemble_matrix import assemble_matrix
 from assemble_matrix_derivative import assemble_matrix_derivative
-###
-# python adaptation of the MATLAB code by M. Bollhöfer, TU Braunschweig
-###
+
 
 def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
-
+    """ 
+    The complete AORA procedure. Takes as input arguments the FE system matrices and the desired
+    expansion frequency and basis size.
+    """
     SOAR = 1
     if SOAR == False:
         FIRST_ORDER = 1
@@ -36,17 +53,17 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
     V = np.zeros((np.shape(M)[0],Nr),dtype=np.complex_)
 
     # Initialization of Krylov subspaces for each expansion point 
-    if (LinSysFac == None):
+    if (LinSysFac == None): #if these factors are already given, a performance benefit can be expected.
         LinSysFac = []
     for i in range(NumExpPts):
-        if (len(LinSysFac) != 0):
+        if (len(LinSysFac) != 0): # that's the reuse of coefficients (LU)
             if (i > len(LinSysFac)):
                 A = assemble_matrix(s[i],K,D,M)
-                (Ps,Ls,Us) = sp.linalg.lu(A) # here: dense matrices. cchange for future work on larger systems
+                (Ps,Ls,Us) = sp.linalg.lu(A) # here: dense matrices. change for future work on larger systems
                 LinSysFac.append([Ps,Ls,Us])
             else:
                 (Ps,Ls,Us,Qs) = (LinSysFac[i][0], LinSysFac[i][1], LinSysFac[i][2], LinSysFac[i][3])
-        else:
+        else: # if the LU decomposition is not already given, it is computed here
             A = assemble_matrix(s[i],K,D,M)
             na = np.shape(A)[0]
             A = csc_matrix(A)
@@ -58,7 +75,7 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
             LinSysFac.append([Ps,Ls,Us,Qs])
         R[:,i] = spsolve((Us@np.transpose(Qs)), spsolve(np.transpose(Ps)@Ls,B))
     T = np.zeros((Nr,Nr),dtype=np.complex_)
-    if SOAR:
+    if SOAR: # all given examples are of second order.
         f = np.zeros((np.shape(M)[0],1))
     elif FIRST_ORDER:
         R2 = np.zeros((np.shape(M)[0],NumExpPts))
@@ -101,9 +118,9 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
                 else:
                     R[:,i] = spsolve(  -1*(Us@np.transpose(Qs)), spsolve(  np.transpose(Ps)@Ls, (Ap@V[:,j])  )   )
 
-                # Complete modified Gram-Schmidt procedure for the new moment
+                # Complete modified Gram-Schmidt procedure for the new moment. Modified Gram-Schmidt yields higher numerical stability compared to classical Gram-Schmidt.
                 for t in range(j+1):
-                    if SOAR:
+                    if SOAR: # all given examples are of second order
                         # Orthogonal projection of R(:,i) onto V(:,t)
                         T[t,j] = np.transpose(V[:,t]).conj()  @ R[:,i]
                         R[:,i] = R[:,i] - T[t,j] * V[:,t]
@@ -136,4 +153,4 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
 
 
 
-    return (V, info, LinSysFac, R,T)
+    return (V, info, LinSysFac, R, T) # V is the projection matrix and the most important output. LinSysFac are the LU coefficients, which can be saved for further use.

@@ -1,3 +1,8 @@
+"""
+Helper function for AORA.py
+
+"""
+
 import numpy as np
 
 def assemble_matrix_derivative(s,K,D,M,**kwargs):

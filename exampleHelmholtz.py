@@ -1,9 +1,23 @@
 """
 statROM Helmholtz 1D example
+
+This file provides the majority of methods necassary for the statROM procedure, 
+including parameter sampling, data generation and data assimilation. 
+It wraps the FEM and ROM solvers, which are provided by RB_solver.py and AORA.py. 
+It also wraps low-level data assmiliation procedures.
+
+The most important methods are 
+getAORAbasis() ->           Uses the AORA framework to compute the ROM basis
+calcROMprior() ->           Given the AORA ROM basis, the ROM prior for a certain frequency is computed.
+                            Also, the ROM error estimator, which is a core functionality of the statROM 
+                            procedure, is called when running this function.
+romErrorEst() ->            Here, the main functionality of the ROM error estimator is implemented.
+errorGP() ->                Helper function for the error estimator that implements the GP interpolation.
+getCorrectedROMPosterior()->Calls all necessary data assimilation methods
 """
 
 __author__ = "Lucas Hermann"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __license__ = "MIT"
 
 
@@ -42,6 +56,7 @@ class StatROM_1D:
     Methods to call FEM/ROM solvers and statFEM routines.
     """
     def __init__(self,up):
+        """Input arguments: user parameters up"""
         self.up = up
         ne = up.n
         self.RBmodel = RBClass(self.up)
@@ -50,14 +65,18 @@ class StatROM_1D:
 
 
     def reset(self,ne):
-        """doc"""
+        """Enables simple re-initialisation during convergence studies"""
         self.RBmodel.reset(ne=ne)
-        self.L = self.up.m  #5   	                    # size of basis
+        self.L = self.up.m  #5   	                # size of basis
         self.par1 = self.up.f  #460                 # frequency
         self.par2 = 1.15#1.1011236
 
 
     def wrapper_AORA(self,rhs_sp=None,mat_par=None):
+        """ wraps the AORA methods in order to compute the ROM primal and
+            adjoint basis.
+            Input arguments: right hand side sample of the system of equations rhs_sp, material parameter mat_par
+        """
         self.V_AORA,self.V_adj_list = self.getAORAbasis(Nr=self.L,rhs_sp=rhs_sp,matCoef=mat_par)[0:2]
         self.V_AORA_mean,self.V_adj_list = self.getAORAbasis(Nr=self.L,rhs_sp=np.pi**2/50,matCoef=np.array([0,0,0]))[0:2]
 
@@ -66,33 +85,41 @@ class StatROM_1D:
         """ Calls the adaptive order rational Arnoldi ROM
             code to compute and store ROM projection matrices V.
             This is basically the majority of the offline part of the method.
+            
+            Input arguments: size of basis Nr, expansion frequency freq_exp, 
+            material parameter matCoef, right hand side sample of the system of equations rhs_sp
         """
-        freq_exp = self.up.s
-        s0 = 2*np.pi*freq_exp / 343
+        freq_exp = self.up.s 
+        s0 = 2*np.pi*freq_exp / 343 # expansion frequency expressed as wave number
         if rhs_sp==None:
             rhs_sp=np.pi**2/50
-        self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=rhs_sp,mat_par=matCoef)
-        V_AORA,_,LinSysFac,_,_= AORA(self.RBmodel.Msp.todense(),self.RBmodel.Dsp.todense(),self.RBmodel.KKsp.todense(),self.RBmodel.FFnp,self.RBmodel.C,[s0],Nr)
-        P_error_est = self.RBmodel.getP(self.y_points_error_est)
-        V_adj_list = [AORA(self.RBmodel.Msp.todense().T,self.RBmodel.Dsp.todense().T,self.RBmodel.KKsp.todense().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])]
+        self.RBmodel.doFEMHelmholtz(freq = self.par1,rhsPar=rhs_sp,mat_par=matCoef) # call model at expansion frequency to get system matrices
+        V_AORA,_,LinSysFac,_,_= AORA(self.RBmodel.Msp.todense(),self.RBmodel.Dsp.todense(),self.RBmodel.KKsp.todense(),self.RBmodel.FFnp,self.RBmodel.C,[s0],Nr)  # run AORA routines with system matrices
+        P_error_est = self.RBmodel.getP(self.y_points_error_est) # projectiono matrix for the collocation points
+        V_adj_list = [AORA(self.RBmodel.Msp.todense().T,self.RBmodel.Dsp.todense().T,self.RBmodel.KKsp.todense().T,P_error_est[i],self.RBmodel.C,[s0],Nr,LinSysFac=LinSysFac)[0] for i in range(np.shape(P_error_est)[0])] # adjoint ROM for each collocation point
 
         self.nAora = Nr
         return V_AORA,V_adj_list,Nr
 
 
     def generateParameterSamples(self,n_samp):   
-        """ sample the parameter space using QMC """ 
+        """ sample the parameter space using QMC 
+            Input arguments: number of samples n_samp
+        """ 
         diag_all = [1.0 for _ in range(3)] # material parameter, standard normal, goes into KLE later
         diag_all.insert(0,0.02**2)  # right hand side, Neumann
-        g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=4),mean=[np.pi**2/50,0.0,0.0,0.0],covariance=np.diag(diag_all))
+        g_all = qp.true_measure.gaussian.Gaussian(qp.discrete_distribution.digital_net_b2.digital_net_b2.DigitalNetB2(dimension=4),mean=[np.pi**2/50,0.0,0.0,0.0],covariance=np.diag(diag_all)) # sample QMC rule
         all_par_samples = g_all.gen_samples(n_samp)
-        self.f_samples = all_par_samples[:,0]
-        self.par_samples = all_par_samples[:,1:]
+        self.f_samples = all_par_samples[:,0] # RHS sample
+        self.par_samples = all_par_samples[:,1:] # material parameter sample
 
         return 0
 
 
     def saveBasis(self,V,V_adj,i):
+        """ save the ROM basis to binary for further use 
+            Input arguments: ROM projection primal and adjoint bases V and V_adj, sample index i
+        """ 
         with open('Results/bases/basisAORA1D_sample'+str(i)+'.npy', 'wb') as fileArray:
             np.save(fileArray,V)
         with open('Results/bases/basisAdj1D_sample'+str(i)+'.npy', 'wb') as fileArray:
@@ -102,11 +129,18 @@ class StatROM_1D:
 
 
     def computeROMbasisSample(self,sample,i):
+         """ Compute the ROM basis for multiple parameter realisations. 
+             Results in multiple projection matrices V.
+             Input arguments: rhs sample, sample index i
+         """ 
         self.wrapper_AORA(rhs_sp=sample,mat_par=self.par_samples[i])
         self.saveBasis(self.V_AORA,self.V_adj_list,i)
 
 
     def loadBasis(self,i):
+        """ load a saved AORA ROM basis
+            Input arguments: sample index i
+         """ 
         with open('Results/bases/basisAORA1D_sample'+str(i)+'.npy', 'rb') as fileArray:
                self.V_AORA = np.load(fileArray)
         with open('Results/bases/basisAdj1D_sample'+str(i)+'.npy', 'rb') as fileArray:
@@ -119,18 +153,21 @@ class StatROM_1D:
         """ Computes the prior mean and covariance for the ROM
             as well as the ROM error estimate.
         """ 
-        u_rom = []
-        d_rom = []
+        # containers for the samples:
+        u_rom = [] # state
+        d_rom = [] # error
+
+        # solve for ROM and error estimate for each sample:
         for i,sample in enumerate(self.f_samples):
             self.loadBasis(i)
-            u = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample,self.par_samples[i]])
+            u = self.RBmodel.getPriorAORA(self.V_AORA,[self.par1,sample,self.par_samples[i]]) # call ROM routines for each parameter sample
             u_rom.append(u)
-            dr = self.romErrorEst([self.par1,sample,self.par_samples[i]],ur=u,multiple_bases=True)
+            dr = self.romErrorEst([self.par1,sample,self.par_samples[i]],ur=u,multiple_bases=True) # call error estimate routines for each parameter sample
             d_rom.append(dr)
     
-        C_u = np.cov(np.array(u_rom), rowvar=0, ddof=0)
-        self.u_mean = np.mean(np.array(u_rom),axis=0)
-        self.dr_mean, self.dr_cov = self.errorGPnoisy(d_rom,self.y_points_error_est)
+        C_u = np.cov(np.array(u_rom), rowvar=0, ddof=0) # state covariance
+        self.u_mean = np.mean(np.array(u_rom),axis=0) # state mean
+        self.dr_mean, self.dr_cov = self.errorGPnoisy(d_rom,self.y_points_error_est) # error estimate mean and covariance for the full field by calling the errorGP routine
         ident = np.identity(np.shape(C_u)[0])
         self.C_u = C_u + 9e-11*ident #-4
         
@@ -142,14 +179,15 @@ class StatROM_1D:
 
     def get_noisy_data_from_solution(self,n_sens,solution):
         """ Computes a data generating solution and samples noisy data from it at sensor points.
-            Also handles the error estimator training points positions.    
+            Also handles the error estimator training points positions.   
+            Input arguments: number of sensors n_sens, reference solution   
         """
-        n_sens = self.up.ns
+        n_sens = self.up.ns # number of sensors
         self.n_sens = n_sens
 
-        size_fine = np.shape(self.RBmodel.coordinates)[0]-1
+        size_fine = np.shape(self.RBmodel.coordinates)[0]-1 # number of dofs in the fine reference mesh
         idx = np.round(np.linspace(0, size_fine, n_sens)).astype(int)
-        n_error_est = self.up.n_est 
+        n_error_est = self.up.n_est # number of error estimator collcation points
         idx_error_est = np.round(np.linspace(1, self.RBmodel.ne, n_error_est)).astype(int)
 
         self.y_points = [self.RBmodel.coordinates.tolist()[i] for i in idx] # sensor locations
@@ -163,6 +201,7 @@ class StatROM_1D:
         y_values_list = []
         self.RBmodel.get_C_f()
 
+        # sample the noise process and save n_obs samples per sensor
         for i in range(n_obs):
             y_values_list.append([x+np.random.normal(0,self.up.sig_o) for j,x in enumerate(values_at_indices)]) #1e-1
         a = np.array(y_values_list)
@@ -175,18 +214,19 @@ class StatROM_1D:
             using evaluations of the adoint solution at
             given points throughout the domain and a
             GP regression.
+            Input arguments: rhs paramater, ROM solution ur, multiple bases flag
         """
 
-        P = self.RBmodel.getP(self.y_points_error_est)
+        P = self.RBmodel.getP(self.y_points_error_est) # projection matrix to filter the positions of the collocation points
         V_state = self.V_AORA
         
-        _, A, _ = self.RBmodel.doFEMHelmholtz(freq=par[0],rhsPar=par[1],mat_par=par[2],assemble_only=True)
+        _, A, _ = self.RBmodel.doFEMHelmholtz(freq=par[0],rhsPar=par[1],mat_par=par[2],assemble_only=True) # assemble the FEM system matrix (no solve)
         
         f_rhs = self.RBmodel.FFnp.copy()
         ai, aj, av = A.getValuesCSR()
         Asp = csr_matrix((av, aj, ai))
         A = Asp.todense()
-        Ar = self.RBmodel.getAr(V_state,A)
+        Ar = self.RBmodel.getAr(V_state,A) 
         if isinstance(ur,type(None)):
             ur = self.u_mean
         else: 
@@ -197,14 +237,16 @@ class StatROM_1D:
         dr=[]
         dr_exact = []
         for i in range(np.shape(P)[0]):
-            V = self.V_adj_list[i]
+            V = self.V_adj_list[i] # get ROM projection matrix for collocation point i
+            # project system matrix with ROM:
             A_r_T = np.transpose(V)@np.transpose(A)@V
+            # solve adjoint ROM for a single collocation point:
             zr = np.linalg.solve(A_r_T,(V.T)@P[i])
-            z_est = V@zr
+            z_est = V@zr # project adjoint back onto original size
             z_exact = np.linalg.solve(A.T,P[i])
-            dr_i = z_est.T@np.array(residual)[0]
-            dr_i_exact = z_exact.T@np.array(residual)[0]
-            dr.append(dr_i)
+            dr_i = z_est.T@np.array(residual)[0]  # compute error estimate for the single collocation point
+            dr_i_exact = z_exact.T@np.array(residual)[0] # for reference
+            dr.append(dr_i) # add point error estimate to the total list of point estimates
             dr_exact.append(dr_i_exact)
 
         self.dr_est = dr
@@ -212,8 +254,8 @@ class StatROM_1D:
         reference = np.copy(self.dr_ex)
         solution = self.dr_est
         print(np.linalg.norm(reference-solution)/np.linalg.norm(reference))
-        if multiple_bases == False:
-            self.dr_mean, self.dr_cov = self.errorGP(dr,self.y_points_error_est)
+        if multiple_bases == False: # False, if the estimate should not be computed for each sample
+            self.dr_mean, self.dr_cov = self.errorGP(dr,self.y_points_error_est) #GP interpolation
         else:
             return dr
 
@@ -222,6 +264,7 @@ class StatROM_1D:
         """ Computes the GP regression for the ROM error
             given the approximative adjoint solution for
             the error at given points.
+            nput arguments: estimated ROM error at collocation points dr, collocation points y_points
         """
         print("errorgp")
         with open('./Results/dr.npy', 'wb') as fileArray:
@@ -229,6 +272,7 @@ class StatROM_1D:
         ident_coord = np.identity(len(self.RBmodel.coordinates))
         y_points = np.array(y_points)
 
+        # simple way to find suitable hyperparameters
         l = 343/self.par1/4
         sig = np.max(np.abs(dr))*2
 
@@ -236,13 +280,14 @@ class StatROM_1D:
         noise_std = np.max(np.abs(dr))/10
 
         noise = noise_std**2 * np.identity(np.shape(y_points)[0])
-        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+noise#+1e-15*ident_y
-        mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates,lf=l,sigf=sig)
+        data_kernel = kernels.matern52(y_points,y_points,lf=l,sigf=sig)+noise#+1e-15*ident_y #kernel for the data space
+        mixed_kernel = kernels.matern52(y_points,self.RBmodel.coordinates,lf=l,sigf=sig) # kernel for data/dofs mixed
 
-        solved = scipy.linalg.solve(data_kernel, mixed_kernel, assume_a='pos').T
-        post_mean = solved @ dr
-        post_cov = prior_cov - (solved@mixed_kernel)
-
+        solved = scipy.linalg.solve(data_kernel, mixed_kernel, assume_a='pos').T # solve
+        post_mean = solved @ dr # find mean for the full field
+        post_cov = prior_cov - (solved@mixed_kernel) # find covariance for the ful field
+        
+        # sample and plot for visualization
         ys_post = np.random.multivariate_normal(
         mean=np.real(post_mean), cov=np.real(post_cov), 
         size=5)
@@ -267,7 +312,8 @@ class StatROM_1D:
         """ Computes the GP regression for the ROM error
             given the approximative adjoint solution for
             the error at given points, 
-            variant for with multiple samples of d_r
+            variant for with multiple samples of d_r+
+            Input arguments: estimated ROM error at collocation points dr, collocation points y_points
         """
         n_obs = np.shape(dr)[0]
         dr_mean = np.mean(np.real(dr),axis=0)
@@ -326,7 +372,9 @@ class StatROM_1D:
 
 
     def getFullOrderPrior(self):
-        # prior calculation Full Order Model
+        """ As a reference solution, the prior for the FEM model can be solved without 
+            reducing the order of the system.
+        """
         u = []
         for i,samp in enumerate(self.f_samples):
             _, _, ui  = self.RBmodel.doFEMHelmholtz(freq=self.par1,rhsPar=samp,mat_par=self.par_samples[i])
@@ -356,6 +404,10 @@ class StatROM_1D:
 
 
     def computeErrorNorm(self,solution,reference):
+        """ To assess the performance of the method, this method implements the enery norm
+            to comapre ROM solutions to the FE reference.
+            Input arguments: estimated solution, reference solution
+        """
         bar_p_sq = 0
         for p in solution:
             val = np.sqrt(np.abs(p*p))
@@ -411,6 +463,9 @@ class StatROM_1D:
 
 
     def switchMesh(self,grade):
+        """ For the error norm and reference solution, a finer mesh is used.
+            Here, the used mesh and interpolation is changed globally.
+        """
         if grade == "ground_truth":
             funcs.RBmodel.msh = funcs.RBmodel.msh_ground_truth
             funcs.RBmodel.V = funcs.RBmodel.V_ground_truth
@@ -423,6 +478,10 @@ class StatROM_1D:
 
 
     def switchMesh_self(self,grade):
+        """ For the error norm and reference solution, a finer mesh is used.
+            Here, the used mesh and interpolation is changed globally.
+            Input arguments: grade of the mesh, either fine "ground_truth" or "coarse"
+        """
         if grade == "ground_truth":
             self.RBmodel.msh = self.RBmodel.msh_ground_truth
             self.RBmodel.V = self.RBmodel.V_ground_truth
@@ -436,6 +495,8 @@ class StatROM_1D:
 
 
     def saveData(self):
+        """ Save all relevant data as txt and solutions as binary
+        """
         data = {'number of elements': self.RBmodel.ne,
                 'number of sensors': self.n_sens,
                 'number of observations': self.RBmodel.no,
@@ -481,6 +542,9 @@ class StatROM_1D:
 
 
     def plotPriorPosteriorComparison(self,prior=True,posterior=True):
+        """ Plot a comparison between FEM/ROM priors and the corresponding posteriors.
+            Input arguments: flags for prior and/or posterior plotting
+        """
         fig = plt.figure(figsize=(6,3), dpi=300)
         if prior == True:
             plt.plot(self.RBmodel.coordinates, np.real(self.u_mean_std), linestyle='-', color = 'red',lw = 1.0, label='Prior FEM')
@@ -522,6 +586,8 @@ class StatROM_1D:
 
 
     def plotRomError(self):
+        """ Plot the estimated ROM error against the exact ROM error.
+        """
         fig = plt.figure(figsize=(8,4), dpi=100)
         plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.u_mean_std - self.u_mean)), linestyle='-', color = 'black',lw = 1.5,label='exact')
         plt.plot(self.RBmodel.coordinates, np.real(np.transpose(self.dr_mean)), linestyle='-', color = 'purple',lw = 1.5,label='estimate')

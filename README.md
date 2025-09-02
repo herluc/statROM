@@ -5,20 +5,20 @@
 This is Python code to reproduce the results in our reduced order model statFEM paper.
 
 ## Overview and Structure
-The flowchart Figure 1 in the paper reflects an overview the code as follows:
+The flowchart Figure 1 in the paper reflects an overview of the code as follows:
 ### Offline phase:
 1. Sample parameter space: Implemented in exampleHelmholtz.py as generateParameterSamples()
 2. Construct primal/adjoint ROM: Implemented in exampleHelmholtz.py as computeROMbasisSample()
 ### Online phase:
 1. Reduce matrices and solve: Implemented in exampleHelmholtz.py as calcROMprior()
-2. Estimate ROM error: This is a core functionality of this code and also implemented within calcROMprior()
+2. Estimate ROM error: This is a core functionality of this code and also implemented within calcROMprior(), which calls romErrorEst() for the low level error estimator code.
 3. Data Assimilation: Implemented in exampleHelmholtz.py as getCorrectedROMPosterior()
 
 Both demo files are structured around this framework.
 The file hierarchy is structured as follows:
 1. demo.py: This is the high level run-file. User parameters are declared and the individual parts of the statROM procedure are called. exampleHelmholtz.py is imported.
-2. exampleHelmholtz.py: This file provides the majority of methods necassary for the statROM procedure, including parameter sampling, data generation and data assimilation. It wraps the FEM and ROM solvers, which are provided by RB_solver.py and AORA.py. I talso wraps low-level data assmiliation procedures.
-3. RB_solver.py: Here, the FEniCSx FEM solver is implemented along with futher low-level methods for data assimilation. The file also wraps AORA.py to generate the ROM basis.
+2. exampleHelmholtz.py: This file provides the majority of methods necassary for the statROM procedure, including parameter sampling, data generation and data assimilation. It wraps the FEM and ROM solvers, which are provided by RB_solver.py. It also wraps AORA.py to compute the ROM basis and low-level data assmiliation procedures.
+3. RB_solver.py: Here, the FEniCSx FEM solver and the ROM solver are implemented along with futher low-level methods for data assimilation. 
 4. AORA.py: Along with assemble_matrix.py and assemble_matrix_derivative.py, this file implements the AORA procedure.
 
 Details on the implemented classes and methods in the individual files are given in the respective file header.

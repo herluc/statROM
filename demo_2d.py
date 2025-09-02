@@ -1,5 +1,9 @@
 """
 statROM Helmholtz 2D scattering example
+
+This is the high level run-file. User parameters are declared and the individual parts
+of the statROM procedure are called. exampleHelmholtz.py is imported to provide the relevant
+methods for data generation, prior computation, error estimation and data assimilation.
 """
 
 __author__ = "Lucas Hermann"

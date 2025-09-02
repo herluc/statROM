@@ -1,3 +1,23 @@
+"""
+statROM Helmholtz 1D example
+
+Here, the FEniCSx FEM solver is implemented along with futher low-level methods for data assimilation. 
+The file also wraps AORA.py to generate the ROM basis.
+
+The most important methods are 
+doFEMHelmholtz() ->           Implements the FEniCSx FEM solver. This is used to compute the ROM basis.
+getPriorAORA() ->             Uses a given AORA basis to compute a ROM prior
+computePosteriorROM() ->      Implements the low level data assimilation routines
+
+"""
+
+__author__ = "Lucas Hermann"
+__version__ = "0.2.0"
+__license__ = "MIT"
+
+
+
+
 import ufl
 from dolfinx.fem import Function, FunctionSpace, assemble_scalar, form, Constant, locate_dofs_topological, dirichletbc
 from dolfinx.fem.petsc import LinearProblem, assemble_matrix, assemble_vector
