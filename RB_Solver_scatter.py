@@ -51,6 +51,7 @@ class RBClass:
     """solver class for a reduced order statFEM approach"""
 
     def __init__(self,up):
+        '''Input arguments: user parameters up'''
         self.up = up
         self.reset()
 
@@ -91,6 +92,7 @@ class RBClass:
 
 
     def incident(self,x):
+        '''Input arguments: coordinate x'''
         # Plane wave travelling in positive x-direction
         return 10*np.exp(1.0j * self.k *x[0])
         
@@ -98,13 +100,16 @@ class RBClass:
     def doFEMHelmholtz(self,freq,rhsPar=0,het_par=0,assemble_only=False):
         """basic FEM solver for the Helmholtz equation 
         Returns the mean solution for the prior and expects the frequency parameters.
+        Input arguments: frequency, RHS parameter, material parameter, assemble only flag
         """
         c = 340
-        k = 2 * np.pi * freq / c
+        k = 2 * np.pi * freq / c # wave number
         self.k = k
 
+        # material coefficient:
         self.hetCoef = Function(self.V)
 
+        # functions for the RHS:
         self.s = Function(self.V)
         self.s.vector.array[:] = np.real(rhsPar)
         self.si = Function(self.V)
@@ -117,15 +122,17 @@ class RBClass:
         dx = ufl.Measure("dx")
         ds = ufl.Measure("ds", domain=self.msh, subdomain_data=self.facet_markers)
 
+        # incident wave interpolation:
         ui = Function(self.V)
         ui.interpolate(self.incident)
-        self.ui=ui
+        self.ui=ui 
 
+        # the bilinear form:
         b= 1j*self.k
         a = ufl.inner(ufl.grad(u), ufl.grad(v)) * dx - self.k**2 * ufl.inner(u, v) * dx  - b * ufl.inner(u , v) * ds(40)  # usually: g*ufl.inner(...)
-
         L = -ufl.inner(ui+1j*self.si+self.s, v) *dx
 
+        # set dirichlet BCs:
         dofs_dirichl_coarse = locate_dofs_topological(self.V_coarse, self.msh_coarse.topology.dim-1, self.facet_markers_coarse.find(50))
         self.dofs_dirichl_coarse = dofs_dirichl_coarse
         dofs_dirichl = locate_dofs_topological(self.V, self.msh.topology.dim-1, self.facet_markers.find(50))
@@ -134,6 +141,7 @@ class RBClass:
         uD.interpolate(lambda x: 0.0*x[0]+0.0*x[1])
         bc = dirichletbc(uD, dofs_dirichl)
 
+        # complete system matrix A assembly:
         A = assemble_matrix(form(a))
         A.assemble()
         self.rhs = L
@@ -141,6 +149,7 @@ class RBClass:
         LL.assemble()
         self.LLnp = LL.getArray()
 
+        # A split into M, D, K for AORA:
         m = -inner(u, v) * dx
         M = assemble_matrix(form(m), bcs=[bc])
         M.assemble()
@@ -159,6 +168,7 @@ class RBClass:
         kki, kkj, kkv = KK.getValuesCSR()
         self.KKsp = csr_matrix((kkv, kkj, kki))
 
+        # RHS assembly:
         ff = -inner(ui+1j*self.si+self.s, v) * dx
         FF = assemble_vector(form(ff))
         apply_lifting(FF, [form(a)], bcs=[[bc]])
@@ -175,12 +185,13 @@ class RBClass:
         Asp = k*k*self.Msp + k*self.Dsp+ self.KKsp
         self.A = Asp
         
-        # Compute solution
+        # Compute solution:
         uh = Function(self.V)
         uh.name = "u"
 
         self.problem = LinearProblem(a, L,bcs=[bc],u=uh)
 
+        # sometimes only assembly and no solve is necessary:
         if assemble_only == False:
             self.problem.solve()
             uh_np = uh.vector.getArray()
@@ -194,14 +205,19 @@ class RBClass:
             return U, self.A, uh_np
 
         
-
+    
     def solveFEM(self, rhsPar):
+        ''' separate solve function to minimize allocations'''
+        '''Input arguments: RHS parameter'''
         p_full = spsolve(self.A,self.FFnp)
         uh_np = p_full
         return None, None, uh_np
     
 
     def solveFEMData(self,sample):
+        ''' solve FEM on a fine mesh to get the ground truth
+            Input arguments: RHS sample
+        '''
         self.s.vector.array[:] = np.real(sample) * (np.cos(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1) + 1j*np.imag(sample) * (np.sin(self.coordinates[:,1]* 4.5 *np.pi)*0.8+1)
         with XDMFFile(MPI.COMM_WORLD, "./Results/data_f.xdmf", "w") as xdmf:
             xdmf.write_mesh(self.msh)
@@ -225,7 +241,9 @@ class RBClass:
 
 
     def getAr(self,V,A):
-        """projects a matrix A into reduced space."""
+        """projects a matrix A into reduced space.
+           Input arguments: ROM projection matrix V, system matrix A
+        """
         A_r = V.conj().T@A@V
         return A_r
 
@@ -257,12 +275,15 @@ class RBClass:
 
     def getPriorAORA(self,V,par):
         """ With a given projection matrix V and parameter sample, compute the ROM result
+            Input arguments: projection matrix V, FEM parameters
         """
         
-        _ = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1]
+        _ = self.doFEMHelmholtz(par[0],par[1],par[2],assemble_only=True)[1] # assemble A
         start = time.time() 
         c = 340
-        k = 2 * np.pi * par[0] / c
+        k = 2 * np.pi * par[0] / c # wave number
+
+        # project matrices with V to get the ROM:
         V_H = V.conj().T
         Mr = V_H@self.Msp@V
         Dr = V_H@self.Dsp@V
@@ -270,8 +291,8 @@ class RBClass:
         Fr=V_H@self.FFnp
         Asp_rom = k*k*Mr + k*Dr+ Kr
         
-        p_rom = spsolve(Asp_rom,Fr)
-        p_rom_re = V@p_rom
+        p_rom = spsolve(Asp_rom,Fr) # solve ROM
+        p_rom_re = V@p_rom # project solution back to FEM dofs
         end = time.time()
         duration = end - start
         self.times_reducedorder.append(duration)
@@ -286,23 +307,33 @@ class RBClass:
         
         returns the neg log likelihood
         expects a set of parameters, the sensor locations and the prior covariance matrix.
+        Input arguments: set of hyperparameters, sensor locations, observation data, prior covariance matrix, sensor projection matrix.
         """
+        # parameters for the model error GP:
         rho = params[0]
         sigd = params[1]
         ld = params[2]
+
+        # data:
         y_valuesList=y_values
         y_points = np.transpose(np.atleast_2d(np.array(y_points)))
+
         logpost = 0
-        rho = np.exp(rho)
+        rho = np.exp(rho) # enforce positivity
+
+        # project the covariance to sensor space:
         C_u_trans = multi_dot([P,C_u,P.T])
         C_u_trans = 0.5*(C_u_trans+C_u_trans.T)
 
+        # add all covariances:
         K_y = self.get_C_d(y_points = y_points,ld=ld,sigd=sigd)+ self.C_e + rho**2 * C_u_trans
 
+        # faster solve with cholesky
         L = cho_factor(K_y)
         Log_K_y_det = 2 * np.sum(np.log(np.diag(L[0])))
         i=0
 
+        # iterate through all observations to get total log marginal likelihood:
         for obs in y_valuesList:
             y_values = np.array(obs)
             ny = len(y_values)  
@@ -324,7 +355,7 @@ class RBClass:
         """compute the negative log likelihood for multiple observations for the ROM case
         
         returns the neg log likelihood
-        expects a set of parameters, the sensor locations and the prior covariance matrix.
+        Input arguments: set of hyperparameters, sensor locations, observation data, prior covariance matrix, ROM error covariance, ROM error mean, sensor projection matrix.
         """
 
         rho = params[0]
@@ -337,12 +368,14 @@ class RBClass:
         rho = np.exp(rho)
         C_u_trans = multi_dot([P,C_u,P.T])
         C_u_trans = 0.5*(C_u_trans+C_u_trans.T)
-       
+
+        # add all covariances:
         K_y = self.get_C_d(y_points = y_points,ld=ld,sigd=sigd)+ rho**2*C_d_r + self.C_e + rho**2 * C_u_trans
         L = cho_factor(K_y)
         Log_K_y_det = 2 * np.sum(np.log(np.diag(L[0])))
         i=0
 
+        # iterate through all observations to get total log marginal likelihood:
         for obs in y_valuesList:
             if isinstance(obs, np.float64):
                 ny = 1
@@ -367,16 +400,22 @@ class RBClass:
 
         expects sensor locations, observation data and the prior covariance matrix.
         returns a set of hyperparameters.
+        Input arguments: sensor locations, observation data, prior covariance matrix, prior mean, ROM error estimate mean, ROM error estimate cov, ROM/FEM flag.
         """
 
-        P = self.getP(y_points)
+        # project the dof vector:
+        P = self.getP(y_points) # projection matrix
         Pu = np.dot(P,u_mean)
+
         y_points = np.transpose(np.atleast_2d(np.array(y_points)))
         y_values = np.array(y_values)
-        
+
+        # provide initial values for the optimizer:
         rho_est = np.log(1.001)
         sigd_est = np.log(0.01)
         ld_est = np.log(0.5)
+
+        # run an optimizer to find the optimal hyperparameters given the data:
         if ROM == False:
             result = scipy.optimize.minimize(fun=self.getLogPostMultiple,method='L-BFGS-B',bounds=((-2,1),(-15,2),(-20,5)),x0=np.array([rho_est,sigd_est,ld_est]),args=(y_points, y_values,C_u,P,Pu),tol=1e-8)
         elif ROM == True:
@@ -420,23 +459,26 @@ class RBClass:
         
         expects the sensor locations and the prior mean
         returns P
+        Input arguments: sensor locations
         """
         y_points = y_points
-        ny = len(y_points)
-        ne = np.shape(self.Msp.todense())[0]
-        P = np.zeros((ny, ne), dtype = float)
+        ny = len(y_points) # number of sensors
+        ne = np.shape(self.Msp.todense())[0] # number of dofs
+        P = np.zeros((ny, ne), dtype = float) # pre-allocate matrix
 
         for j,point in enumerate(y_points):
+            # check in which cell the sensor lies:
             point = np.atleast_2d(point)
             bb = BoundingBoxTree(self.msh, self.msh.topology.dim)
             bbox_collisions = compute_collisions(bb, point)
             cells = compute_colliding_cells(self.msh, bbox_collisions, point)
             cell = cells.links(0)[0]
+            # check reference coordinates in the cell:
             geom_dofs = self.msh.geometry.dofmap.links(cell)
             x_ref = self.msh.geometry.cmap.pull_back(point, self.msh.geometry.x[geom_dofs])
             el = self.V.element.basix_element
             ref_coord = el.tabulate(0,x_ref)
-
+            # assemble P:
             for i in range(self.V.element.space_dimension):
                P[j,geom_dofs[i]] = ref_coord[0][0][i]
 
@@ -493,12 +535,15 @@ class RBClass:
         expects the sensor locations, the observation data vector and the prior GP.
         returns the posterior GP
         here, y_values is a vector of different measurement sets. 
+        Input arguments: sensor locations, observation data, prior mean, prior covariance matrix, ROM error mean, ROM error covariance.
         """
-        C_e = self.get_C_e(len(y_points))
-        P = self.getP(y_points)
+        C_e = self.get_C_e(len(y_points)) # get noise covariance
+        P = self.getP(y_points) # get sensor projection matrix
       
         self.C_e = C_e
-        dROM,CROM = P@dROMfull,P@CROMfull@P.T
+        dROM,CROM = P@dROMfull,P@CROMfull@P.T  # project ROM error estimates to sensor space
+
+        # find optimal hyperparameters:
         pars = self.estimateHyperpar(y_points,y_values,C_u,dROM=dROM,CROM=CROM,u_mean=u_mean,ROM=True)
         rho=pars[0]
         sigd = pars[1]
@@ -510,6 +555,7 @@ class RBClass:
 
         sum_y = np.sum(y_values,axis=0)
 
+        # given the hyperparametes, construct model error covariance:
         C_d = self.get_C_d(y_points.T,ld=ld,sigd=sigd)
         self.C_d_total = self.get_C_d(self.coordinates,ld=ld,sigd=sigd)
 
@@ -518,6 +564,7 @@ class RBClass:
 
         no = np.shape(y_values)[0]
 
+        # Bayesian update:
         c, low = cho_factor((1/(no*rho*rho))*(C_d+rho**2*CROM+C_e)+P@C_u@P_T)
         C_u_y = C_u - C_u@P_T@cho_solve((c, low), P@C_u)
 
