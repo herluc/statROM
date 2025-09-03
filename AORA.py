@@ -118,21 +118,38 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
                 else:
                     R[:,i] = spsolve(  -1*(Us@np.transpose(Qs)), spsolve(  np.transpose(Ps)@Ls, (Ap@V[:,j])  )   )
 
-                # Complete modified Gram-Schmidt procedure for the new moment. Modified Gram-Schmidt yields higher numerical stability compared to classical Gram-Schmidt.
+                # Complete modified Gram-Schmidt procedure for the new moment. Modified Gram-Schmidt yields higher numerical stability 
+                # compared to classical Gram-Schmidt for finite arithmetic.
                 for t in range(j+1):
                     if SOAR: # all given examples are of second order
                         # Orthogonal projection of R(:,i) onto V(:,t)
                         T[t,j] = np.transpose(V[:,t]).conj()  @ R[:,i]
                         R[:,i] = R[:,i] - T[t,j] * V[:,t]
+                        ##############################################
+                        # optional reorthogonalization:
+                        # beta = np.transpose(V[:,t]).conj()  @ R[:,i]
+                        # R[:,i] = R[:,i] - beta * V[:,t]
+                        # T[t,j] = T[t,j] + beta
+                        # this can improve numerical stability. Mostly
+                        # a single orthogonalization step suffices, 
+                        # yet twice is enough.
+                        ##############################################
                     elif FIRST_ORDER:
                         # Orthogonal projection of [R(:,i);R2(:,i)] onto [V(:,t);V2(:,t)]
                         alpha =  np.transpose(V[:,t]).conj()  @ R[:,i] + np.transpose(V2[:,t]).conj()  @ R2[:,i]
                         R[:,i] = R[:,i] - alpha @ V[:,t]
                         R2[:,i] = R2[:,i] - alpha @ V2[:,t]
+                        # optional reorthoginalization:
+                        # alpha =  np.transpose(V[:,t]).conj()  @ R[:,i] + np.transpose(V2[:,t]).conj()  @ R2[:,i]
+                        # R[:,i] = R[:,i] - alpha @ V[:,t]
+                        # R2[:,i] = R2[:,i] - alpha @ V2[:,t]
                     else:
                         # Orthogonal projection of R(:,i) onto V(:,t)
                         alpha = np.transpose(V[:,t]).conj()  @ R[:,i]
                         R[:,i] = R[:,i] - alpha @ V[:,t]
+                        # optional reorthogonalization:
+                        # alpha = np.transpose(V[:,t]) @ R[:,i]
+                        # R[:,i] = R[:,i] - alpha @ V[:,t]
             else:
                 # one further step modified Gram-Schmidt procedure for the old moment
                 t=j
@@ -141,10 +158,19 @@ def AORA(M, D, K, B, C, s, Nr, LinSysFac = None):
                     alpha =  np.transpose(V[:,t]) @ R[:,i] + np.transpose(V2[:,t]) @ R2[:,i]
                     R[:,i] = R[:,i] - alpha @ V[:,t]
                     R2[:,i] = R2[:,i] - alpha @ V2[:,t]
+                    # optional reorthogonalization:
+                    # alpha =  np.transpose(V[:,t]) @ R[:,i] + np.transpose(V2[:,t]) @ R2[:,i]
+                    # R[:,i] = R[:,i] - alpha @ V[:,t]
+                    # R2[:,i] = R2[:,i] - alpha @ V2[:,t]
                 else:
                     # Orthogonal projection of R(:,i) onto V(:,t)
                     alpha = np.transpose(V[:,t]) @ R[:,i]
                     R[:,i] = R[:,i] - alpha @ V[:,t]
+                    ##############################################
+                    # optional reorthogonalization:
+                    # alpha = np.transpose(V[:,t]) @ R[:,i]
+                    # R[:,i] = R[:,i] - alpha @ V[:,t]
+                    ##############################################
     if FIRST_ORDER:
         (V, RR) = sp.linalg.qr(V)
         (URR,SRR,VRR) = sp.linalg.svd(RR)
